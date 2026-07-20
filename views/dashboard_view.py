@@ -162,13 +162,23 @@ def build_dashboard_view(page: ft.Page) -> ft.View:
             content=ft.Column(
                 spacing=0,
                 controls=[
-                    # Bandeau "couverture" en dégradé avec icône.
+                    # Bandeau "couverture" : l'image fournie par le formateur/admin
+                    # si elle existe, sinon le dégradé de marque avec icône par défaut.
                     ft.Container(
                         height=96,
                         gradient=theme.brand_gradient(),
                         alignment=ft.alignment.center,
-                        content=ft.Icon(ft.Icons.MENU_BOOK_ROUNDED, size=42,
-                                        color=ft.Colors.with_opacity(0.9, ft.Colors.WHITE)),
+                        content=ft.Image(
+                            src=course["cover_image_url"],
+                            fit=ft.ImageFit.COVER,
+                            expand=True,
+                            height=96,
+                            error_content=ft.Icon(ft.Icons.MENU_BOOK_ROUNDED, size=42,
+                                                 color=ft.Colors.with_opacity(0.9, ft.Colors.WHITE)),
+                        ) if course.get("cover_image_url") else ft.Icon(
+                            ft.Icons.MENU_BOOK_ROUNDED, size=42,
+                            color=ft.Colors.with_opacity(0.9, ft.Colors.WHITE),
+                        ),
                     ),
                     ft.Container(
                         padding=16,

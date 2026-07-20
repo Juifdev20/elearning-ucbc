@@ -1,3 +1,5 @@
+import asyncio
+
 import flet as ft
 
 from services.certificate_service import generate_certificate, certificate_url
@@ -98,15 +100,18 @@ def build_quiz_view(page: ft.Page, course_id: str) -> ft.View:
             question_controls.append((q["id"], radio_group, q.get("quiz_options", []), card, status_icon))
             questions_column.controls.append(card)
 
-    def submit_quiz(e):
-        if not quiz:
+    submitted = {"v": False}
+
+    def submit_quiz(e, auto=False):
+        if not quiz or submitted["v"]:
             return
         total = len(question_controls)
         if total == 0:
             return
+        submitted["v"] = True  # arrête aussi le compte à rebours s'il tourne encore
 
         # Retour visuel immédiat pendant la correction (requêtes réseau).
-        submit_btn.text = "Correction en cours…"
+        submit_btn.text = "Temps écoulé, correction…" if auto else "Correction en cours…"
         submit_btn.disabled = True
         page.update()
 
@@ -169,6 +174,45 @@ def build_quiz_view(page: ft.Page, course_id: str) -> ft.View:
         # effacées) : un simple page.go() vers la même route redéclenche
         # la construction de la vue depuis zéro.
         page.go(f"/course/{course_id}/quiz")
+
+    # --- Minuteur (si le formateur/admin a fixé une durée pour ce quiz) ---
+    time_limit_min = quiz.get("time_limit_minutes") if quiz else None
+    timer_banner = ft.Container(visible=False)
+
+    if time_limit_min:
+        timer_text = ft.Text(size=20, weight=ft.FontWeight.BOLD, color=theme.Colors.CERT)
+        timer_banner = theme.card(
+            padding=14,
+            bgcolor=theme.tint(theme.Colors.CERT, 0.12),
+            content=ft.Row(
+                alignment=ft.MainAxisAlignment.CENTER,
+                spacing=8,
+                controls=[ft.Icon(ft.Icons.TIMER_OUTLINED, color=theme.Colors.CERT), timer_text],
+            ),
+        )
+
+        async def countdown():
+            remaining = time_limit_min * 60
+            while remaining > 0 and not submitted["v"]:
+                mins, secs = divmod(remaining, 60)
+                timer_text.value = f"Temps restant : {mins:02d}:{secs:02d}"
+                timer_text.color = theme.Colors.ERROR if remaining <= 30 else theme.Colors.CERT
+                try:
+                    timer_banner.update()
+                except Exception:
+                    return  # la vue a été quittée entre-temps
+                await asyncio.sleep(1)
+                remaining -= 1
+            if not submitted["v"]:
+                timer_text.value = "Temps écoulé — correction en cours…"
+                timer_text.color = theme.Colors.ERROR
+                try:
+                    timer_banner.update()
+                except Exception:
+                    return
+                submit_quiz(None, auto=True)
+
+        page.run_task(countdown)
 
     def _build_result(score, passed, pass_score, must_retake_course):
         color = theme.Colors.SUCCESS if passed else theme.Colors.ERROR
@@ -239,6 +283,8 @@ def build_quiz_view(page: ft.Page, course_id: str) -> ft.View:
                 content=ft.Column(
                     scroll=ft.ScrollMode.AUTO,
                     controls=[
+                        timer_banner,
+                        ft.Container(height=12) if time_limit_min else ft.Container(),
                         questions_column,
                         ft.Container(height=16),
                         ft.Row([submit_btn], alignment=ft.MainAxisAlignment.CENTER),

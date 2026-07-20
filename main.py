@@ -291,12 +291,35 @@ if __name__ == "__main__":
     # Hébergement (Render...) : la plateforme impose son port via $PORT et
     # n'a pas de package `flet_desktop` — on sert directement en HTTP.
     # En local sans $PORT défini : comportement par défaut de `ft.app`.
-    # upload_dir : dossier temporaire local requis par Flet pour recevoir les
-    # fichiers (photo de profil) avant qu'on les transfère vers Supabase
-    # Storage — voir services/supabase_service.py:upload_avatar().
     render_port = os.environ.get("PORT")
     if render_port:
-        ft.app(target=main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0",
-              port=int(render_port), upload_dir="uploads")
+        # IMPORTANT : on N'UTILISE PAS ft.app() ici, volontairement.
+        # ft.app() (API haut niveau) ne permet PAS de passer `secret_key`,
+        # or Flet EXIGE cette clé pour signer les URLs d'upload — sans elle,
+        # tout upload de fichier (photo de profil) plante immédiatement avec
+        # "Specify secret_key parameter..." (confirmé par une vraie trace de
+        # production). On assemble donc nous-mêmes l'app FastAPI via l'API
+        # bas niveau (flet_web.fastapi.app), qui expose ce paramètre.
+        import secrets
+
+        import uvicorn
+        import flet_web.fastapi as flet_fastapi
+
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        # Une valeur stable (variable d'env) est préférable en production,
+        # mais une valeur aléatoire générée au démarrage fonctionne très bien
+        # aussi : la signature n'a besoin d'être valide que le temps d'un
+        # upload (quelques minutes), jamais au travers d'un redémarrage.
+        secret_key = os.environ.get("FLET_SECRET_KEY") or secrets.token_hex(16)
+
+        fastapi_app = flet_fastapi.app(
+            main,
+            assets_dir=os.path.join(project_root, "assets"),
+            upload_dir=os.path.join(project_root, "uploads"),
+            upload_endpoint_path="upload",
+            max_upload_size=5 * 1024 * 1024,  # 5 Mo par fichier
+            secret_key=secret_key,
+        )
+        uvicorn.run(fastapi_app, host="0.0.0.0", port=int(render_port))
     else:
         ft.app(target=main, upload_dir="uploads")

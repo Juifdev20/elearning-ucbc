@@ -33,23 +33,44 @@ def build_quiz_editor_view(page: ft.Page, course_id: str) -> ft.View:
         )
         return res.data or []
 
-    # --- Seuil de réussite ---
+    # --- Seuil de réussite + durée limite ---
     pass_f = _field("Seuil de réussite (%)", str(quiz.get("pass_score", 70)) if quiz else "70", width=200)
+    time_limit_f = _field(
+        "Durée limite (minutes, vide = illimité)",
+        str(quiz.get("time_limit_minutes")) if quiz and quiz.get("time_limit_minutes") else "",
+        width=260,
+    )
     pass_feedback = ft.Text("", size=12)
 
     def save_pass(e):
         try:
             val = int(pass_f.value)
             val = max(0, min(100, val))
-            page.db.update_quiz(quiz_id, {"pass_score": val})
-            pass_f.value = str(val)
-            pass_feedback.value = "Seuil enregistré ✓"
-            pass_feedback.color = theme.Colors.SUCCESS
         except ValueError:
-            pass_feedback.value = "Entrez un nombre entre 0 et 100."
+            pass_feedback.value = "Seuil de réussite : entrez un nombre entre 0 et 100."
             pass_feedback.color = theme.Colors.ERROR
+            page.update()
+            return
+
+        time_limit_raw = (time_limit_f.value or "").strip()
+        time_limit = None
+        if time_limit_raw:
+            try:
+                time_limit = max(1, int(time_limit_raw))
+            except ValueError:
+                pass_feedback.value = "Durée limite : entrez un nombre de minutes (ou laissez vide)."
+                pass_feedback.color = theme.Colors.ERROR
+                page.update()
+                return
+
+        try:
+            page.db.update_quiz(quiz_id, {"pass_score": val, "time_limit_minutes": time_limit})
+            pass_f.value = str(val)
+            time_limit_f.value = str(time_limit) if time_limit else ""
+            pass_feedback.value = "Paramètres enregistrés ✓"
+            pass_feedback.color = theme.Colors.SUCCESS
         except Exception:
-            pass_feedback.value = "Écriture refusée (policies RLS / rôle formateur ?)."
+            pass_feedback.value = "Écriture refusée (policies RLS / rôle formateur ? sql/quiz_timer.sql exécuté ?)."
             pass_feedback.color = theme.Colors.ERROR
         page.update()
 
@@ -168,9 +189,14 @@ def build_quiz_editor_view(page: ft.Page, course_id: str) -> ft.View:
         content=ft.Column(
             spacing=10,
             controls=[
-                theme.subtitle("Seuil de réussite"),
-                ft.Row([pass_f, theme.primary_button("Enregistrer", width=160, on_click=save_pass)],
+                theme.subtitle("Seuil de réussite et durée"),
+                ft.Row([pass_f, time_limit_f, theme.primary_button("Enregistrer", width=160, on_click=save_pass)],
                        spacing=12, wrap=True, vertical_alignment=ft.CrossAxisAlignment.START),
+                theme.body(
+                    "Si une durée est définie, l'apprenant voit un compte à rebours pendant "
+                    "l'évaluation ; le temps écoulé, seules les réponses déjà données sont comptées.",
+                    muted=True,
+                ),
                 pass_feedback,
             ],
         ),

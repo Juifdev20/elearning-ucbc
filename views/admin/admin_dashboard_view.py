@@ -80,8 +80,16 @@ def build_admin_dashboard_view(page: ft.Page) -> ft.View:
                     ft.Row(
                         spacing=14,
                         controls=[
-                            theme.tinted_icon(ft.Icons.MENU_BOOK_ROUNDED,
-                                              theme.Colors.PRIMARY_ACTION, box=48, size=22),
+                            ft.Container(
+                                width=48, height=48, border_radius=12,
+                                clip_behavior=ft.ClipBehavior.ANTI_ALIAS,
+                                content=ft.Image(
+                                    src=course["cover_image_url"], fit=ft.ImageFit.COVER,
+                                    error_content=theme.tinted_icon(
+                                        ft.Icons.MENU_BOOK_ROUNDED, theme.Colors.PRIMARY_ACTION, box=48, size=22),
+                                ),
+                            ) if course.get("cover_image_url") else theme.tinted_icon(
+                                ft.Icons.MENU_BOOK_ROUNDED, theme.Colors.PRIMARY_ACTION, box=48, size=22),
                             ft.Column(
                                 expand=True,
                                 spacing=3,
