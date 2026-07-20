@@ -17,6 +17,29 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png" />
 
+  <!-- Désactive le service worker de Flet : conçu pour un support hors-ligne
+       d'une app Flutter web statique, il verrouille en cache (par empreinte
+       de contenu) TOUS les assets — favicon, icônes, manifest, cette page
+       elle-même — dès la première visite. Sans ce script, un visiteur déjà
+       venu une fois ne verrait plus jamais nos mises à jour de branding
+       (logo, titre…), même après un nouveau déploiement. Doit s'exécuter
+       AVANT flutter_bootstrap.js (chargé en fin de <body>). -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function (regs) {
+        regs.forEach(function (reg) { reg.unregister(); });
+      });
+      if (window.caches) {
+        caches.keys().then(function (names) {
+          names.forEach(function (name) { caches.delete(name); });
+        });
+      }
+      navigator.serviceWorker.register = function () {
+        return Promise.resolve({ unregister: function () { return Promise.resolve(true); } });
+      };
+    }
+  </script>
+
   <!-- Flet specific -->
   <meta name="flet-route-url-strategy" content="%FLET_ROUTE_URL_STRATEGY%">
   <meta name="flet-web-pyodide" content="%FLET_WEB_PYODIDE%">

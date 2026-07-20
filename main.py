@@ -2,7 +2,7 @@ import os
 
 import flet as ft
 
-from services.supabase_service import SupabaseService
+from services.supabase_service import SupabaseService, ACCESS_TOKEN_KEY, REFRESH_TOKEN_KEY
 from components import theme
 from components.app_shell import is_desktop, shell_view, home_route
 from components.loading import build_loading_view, build_error_view, loading_body
@@ -41,6 +41,20 @@ def main(page: ft.Page):
     # backend via `page.db`, jamais via un `db` importé globalement.
     page.db = SupabaseService()
     page.dark_mode = False  # préférence clair/sombre : propre à CETTE session
+
+    # "Se souvenir de moi" : si des jetons ont été sauvegardés sur CET appareil
+    # lors d'une connexion précédente (page.client_storage = stockage local du
+    # navigateur/appareil, pas partagé entre utilisateurs), on restaure la
+    # session automatiquement — sinon l'utilisateur retombe simplement sur
+    # l'écran de connexion, sans erreur.
+    try:
+        saved_access = page.client_storage.get(ACCESS_TOKEN_KEY)
+        saved_refresh = page.client_storage.get(REFRESH_TOKEN_KEY)
+        if saved_refresh:
+            page.db.restore_session(saved_access, saved_refresh)
+    except Exception:
+        pass
+
     page.title = "E-Learning UCBC"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.theme = theme.app_theme()

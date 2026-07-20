@@ -34,6 +34,14 @@ def _nav_link(text: str, on_click) -> ft.TextButton:
 
 
 def _header(page: ft.Page, desktop: bool, scroll_to) -> ft.Container:
+    # Seuil PROPRE à cette barre de navigation (indépendant du seuil global
+    # sidebar/bottom-nav de l'app) : entre 840 et ~980px, il y a assez de
+    # place pour "desktop" (logo+texte, gros boutons) mais PAS assez pour en
+    # plus les 3 liens de navigation — les cacher plutôt que risquer un
+    # retour à la ligne qui casserait la barre sur 2-3 lignes.
+    width = page.width or (page.window.width if hasattr(page, "window") else 0) or 1200
+    show_nav_links = desktop and width >= 980
+
     brand_children = [theme.brand_logo(size=38)]
     if desktop:
         # Sur mobile, le nom de marque est retiré pour laisser la place aux
@@ -42,15 +50,6 @@ def _header(page: ft.Page, desktop: bool, scroll_to) -> ft.Container:
             ft.Text("E-Learning UCBC", size=16, weight=ft.FontWeight.BOLD, color=theme.Colors.PRIMARY)
         )
     brand = ft.Row(spacing=10, controls=brand_children)
-
-    nav_links = ft.Row(
-        spacing=4,
-        controls=[
-            _nav_link("Fonctionnalités", lambda e: scroll_to("features")),
-            _nav_link("Comment ça marche", lambda e: scroll_to("how")),
-            _nav_link("Rôles", lambda e: scroll_to("roles")),
-        ],
-    ) if desktop else ft.Container()
 
     if desktop:
         actions = ft.Row(
@@ -89,14 +88,28 @@ def _header(page: ft.Page, desktop: bool, scroll_to) -> ft.Container:
             ],
         )
 
+    # Section centrale : les liens de nav (si assez de place), sinon un
+    # simple espaceur — dans les deux cas elle absorbe tout l'espace
+    # restant, ce qui garde logo à gauche et actions à droite SANS jamais
+    # avoir besoin d'un retour à la ligne (donc jamais de 2e/3e ligne).
+    middle_content = ft.Row(
+        spacing=4,
+        alignment=ft.MainAxisAlignment.CENTER,
+        controls=[
+            _nav_link("Fonctionnalités", lambda e: scroll_to("features")),
+            _nav_link("Comment ça marche", lambda e: scroll_to("how")),
+            _nav_link("Rôles", lambda e: scroll_to("roles")),
+        ],
+    ) if show_nav_links else None
+    middle = ft.Container(expand=True, alignment=ft.alignment.center, content=middle_content)
+
     return ft.Container(
         padding=ft.padding.symmetric(horizontal=24 if desktop else 10, vertical=10),
         bgcolor=theme.Colors.SURFACE,
         border=ft.border.only(bottom=ft.BorderSide(1, theme.Colors.BORDER)),
         content=ft.Row(
-            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-            wrap=True,
-            controls=[brand, nav_links, actions] if desktop else [brand, actions],
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+            controls=[brand, middle, actions],
         ),
     )
 
@@ -222,47 +235,40 @@ def _students_marquee(page: ft.Page, desktop: bool) -> ft.Container:
     # assets/landing/students/ (voir le README de ce dossier).
     base = image_paths if image_paths else [None] * 6
     n = len(base)
-    set_width_px = n * card_w + (n - 1) * spacing
-    duration_ms = n * 2600
+    one_set_width = n * (card_w + spacing)
 
+    # Rangée NATIVEMENT défilante (le même mécanisme que tous les
+    # ft.Column(scroll=...) déjà utilisés partout ailleurs dans l'app —
+    # contrairement à une position animée manuellement dans un Stack, celle-ci
+    # est garantie de fonctionner). Le jeu de cartes est dupliqué deux fois :
+    # une fois la moitié défilée, on saute instantanément (offset=0) au début
+    # du second jeu, identique au premier — le bouclage est invisible.
     track = ft.Row(
         spacing=spacing,
         controls=[_photo_card(p) for p in base] + [_photo_card(p) for p in base],
-        left=0,
-        top=0,
-        animate_position=ft.Animation(duration_ms, ft.AnimationCurve.LINEAR),
+        scroll=ft.ScrollMode.HIDDEN,
     )
 
-    def on_animation_end(e):
-        # Ré-initialisation instantanée (sans animation) une fois qu'un jeu
-        # complet a défilé, puis on relance immédiatement le défilement
-        # suivant : la boucle est continue et invisible pour l'utilisateur.
-        track.animate_position = None
-        track.left = 0
-        track.update()
-        track.animate_position = ft.Animation(duration_ms, ft.AnimationCurve.LINEAR)
-        track.left = -set_width_px
-        track.update()
+    async def auto_scroll():
+        offset = 0.0
+        px_per_tick = 1.6
+        while True:
+            await asyncio.sleep(0.045)
+            if page.route != "/":
+                return
+            offset += px_per_tick
+            if offset >= one_set_width:
+                offset = 0.0
+            try:
+                track.scroll_to(offset=offset, duration=0)
+            except Exception:
+                return  # la page a été fermée / la vue n'existe plus
 
-    track.on_animation_end = on_animation_end
+    page.run_task(auto_scroll)
 
-    async def kick_off():
-        # Laisse le temps à la vue d'être montée avant de déclencher la
-        # première animation (une mise à jour sur un contrôle pas encore
-        # rendu échouerait).
-        await asyncio.sleep(0.3)
-        if page.route != "/":
-            return
-        track.left = -set_width_px
-        track.update()
-
-    page.run_task(kick_off)
-
-    viewport = ft.Stack(
+    viewport = ft.Container(
         height=card_h,
-        expand=True,
-        clip_behavior=ft.ClipBehavior.HARD_EDGE,
-        controls=[track],
+        content=track,
     )
 
     return ft.Container(

@@ -4,12 +4,13 @@ from components import theme
 
 
 def build_signup_view(page: ft.Page) -> ft.View:
-    name_field = theme.text_field("Nom complet", icon=ft.Icons.PERSON_OUTLINE)
-    email_field = theme.text_field("Email", icon=ft.Icons.EMAIL_OUTLINED)
-    password_field = theme.text_field("Mot de passe (min. 6 caractères)", password=True, icon=ft.Icons.LOCK_OUTLINE)
-    error_text = ft.Text("", color=theme.Colors.ERROR, size=13)
-    success_text = ft.Text("", color=theme.Colors.SUCCESS, size=13)
-    loading = ft.ProgressRing(visible=False, width=20, height=20, stroke_width=2, color=theme.Colors.PRIMARY_ACTION)
+    name_field = theme.glass_text_field("Nom complet", icon=ft.Icons.PERSON_OUTLINE)
+    email_field = theme.glass_text_field("Email", icon=ft.Icons.EMAIL_OUTLINED)
+    password_field = theme.glass_text_field("Mot de passe (min. 6 caractères)", password=True,
+                                            icon=ft.Icons.LOCK_OUTLINE)
+    error_text = ft.Text("", color="#FCA5A5", size=13)
+    success_text = ft.Text("", color="#86EFAC", size=13)
+    loading = ft.ProgressRing(visible=False, width=20, height=20, stroke_width=2, color=ft.Colors.WHITE)
 
     def do_signup(e):
         error_text.value = ""
@@ -37,44 +38,52 @@ def build_signup_view(page: ft.Page) -> ft.View:
             signup_btn.disabled = False
             page.update()
 
-    signup_btn = theme.primary_button("Créer mon compte", icon=ft.Icons.PERSON_ADD_ALT_1, width=240, on_click=do_signup)
+    signup_btn = theme.gradient_button("Créer mon compte", icon=ft.Icons.PERSON_ADD_ALT_1,
+                                       width=280, on_click=do_signup)
 
     return ft.View(
         route="/signup",
-        bgcolor=theme.Colors.BG,
+        bgcolor="#0A0F1A",
         padding=0,
         appbar=theme.auth_appbar(page),
         controls=[
-            theme.auth_background(
+            theme.glass_auth_background(
                 ft.Column(
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     alignment=ft.MainAxisAlignment.CENTER,
                     scroll=ft.ScrollMode.AUTO,
                     controls=[
-                        theme.brand_logo(size=64),
-                        ft.Container(height=8),
-                        ft.Text("Créer un compte", size=24, weight=ft.FontWeight.BOLD, color=theme.Colors.PRIMARY),
-                        ft.Container(height=16),
-                        theme.card(
-                            width=320,
-                            padding=24,
+                        theme.glass_card(
+                            width=340,
+                            padding=32,
                             content=ft.Column(
+                                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                                spacing=6,
                                 controls=[
+                                    theme.gradient_icon_badge(ft.Icons.PERSON_ADD_ALT_1_ROUNDED),
+                                    ft.Container(height=10),
+                                    ft.Text("Créer un compte", size=22, weight=ft.FontWeight.BOLD,
+                                            color=ft.Colors.WHITE),
+                                    ft.Text("Rejoignez la plateforme en quelques secondes.", size=13,
+                                            color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
+                                    ft.Container(height=18),
                                     name_field,
                                     email_field,
                                     password_field,
                                     error_text,
                                     success_text,
+                                    ft.Container(height=6),
                                     ft.Row([loading, signup_btn], alignment=ft.MainAxisAlignment.CENTER),
-                                    ft.Container(height=8),
+                                    ft.Container(height=6),
                                     ft.Row(
                                         alignment=ft.MainAxisAlignment.CENTER,
                                         controls=[
-                                            theme.body("Déjà un compte ?", muted=True),
+                                            ft.Text("Déjà un compte ?", size=13,
+                                                    color=ft.Colors.with_opacity(0.6, ft.Colors.WHITE)),
                                             ft.TextButton(
                                                 "Se connecter",
                                                 on_click=lambda e: page.go("/login"),
-                                                style=ft.ButtonStyle(color=theme.Colors.PRIMARY_ACTION),
+                                                style=ft.ButtonStyle(color="#A78BFA"),
                                             ),
                                         ],
                                     ),

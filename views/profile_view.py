@@ -1,9 +1,17 @@
 import os
+from pathlib import Path
 
 import flet as ft
 
 from components import theme
 from components.app_shell import shell_view
+from services.supabase_service import forget_remembered_session
+
+# Chemin ABSOLU (racine du projet, où vit main.py), pour correspondre EXACTEMENT
+# à la résolution que fait Flet en interne pour upload_dir="uploads" passé à
+# ft.app() — un chemin relatif ici dépendrait du répertoire de travail courant
+# au lancement, qui peut différer selon comment l'app est démarrée.
+UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
 
 
 def build_profile_view(page: ft.Page) -> ft.View:
@@ -25,6 +33,7 @@ def build_profile_view(page: ft.Page) -> ft.View:
 
     def logout(e):
         page.db.sign_out()
+        forget_remembered_session(page)
         page.go("/login")
 
     full_name = profile.get("full_name", "") or "Apprenant"
@@ -46,24 +55,34 @@ def build_profile_view(page: ft.Page) -> ft.View:
 
     def on_avatar_uploaded(e: ft.FilePickerUploadEvent):
         if e.error:
-            avatar_feedback.value = "Échec de l'envoi."
+            avatar_feedback.value = f"Échec de l'envoi ({e.error})."
             page.update()
             return
-        if e.progress == 1:
-            local_path = os.path.join("uploads", e.file_name)
+        # IMPORTANT : ne JAMAIS comparer une progression flottante avec ==1 —
+        # le navigateur peut rapporter 0.999999... (arrondi), une égalité
+        # stricte ne se déclenche alors jamais et l'UI reste bloquée sur
+        # "Envoi en cours" indéfiniment (bug constaté : c'était exactement ça).
+        if e.progress is not None and e.progress < 0.999:
+            avatar_feedback.value = f"Envoi en cours… {int(e.progress * 100)}%"
+            page.update()
+            return
+
+        local_path = str(UPLOAD_DIR / e.file_name)
+        try:
+            ext = e.file_name.rsplit(".", 1)[-1] if "." in e.file_name else "jpg"
+            new_url = page.db.upload_avatar(local_path, ext)
+            avatar_display.foreground_image_src = new_url
+            avatar_feedback.value = "Photo mise à jour ✓"
+        except FileNotFoundError:
+            avatar_feedback.value = "Échec : fichier introuvable après l'envoi."
+        except Exception:
+            avatar_feedback.value = "Échec (bucket 'avatars' créé ? sql/avatars_storage.sql)"
+        finally:
             try:
-                ext = e.file_name.rsplit(".", 1)[-1] if "." in e.file_name else "jpg"
-                new_url = page.db.upload_avatar(local_path, ext)
-                avatar_display.foreground_image_src = new_url
-                avatar_feedback.value = "Photo mise à jour ✓"
-            except Exception:
-                avatar_feedback.value = "Échec (bucket 'avatars' créé ? sql/avatars_storage.sql)"
-            finally:
-                try:
-                    os.remove(local_path)
-                except OSError:
-                    pass
-                page.update()
+                os.remove(local_path)
+            except OSError:
+                pass
+            page.update()
 
     def on_avatar_picked(e: ft.FilePickerResultEvent):
         if not e.files:

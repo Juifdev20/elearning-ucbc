@@ -360,13 +360,13 @@ def branded_appbar(title: str, leading=None, actions: list | None = None) -> ft.
 
 def auth_appbar(page: ft.Page, route_back: str = "/") -> ft.AppBar:
     """Barre transparente avec flèche retour, pour les écrans d'authentification
-    (retour à la page d'accueil publique)."""
+    (fond sombre : icône blanche pour rester visible)."""
     return ft.AppBar(
         bgcolor=ft.Colors.TRANSPARENT,
         elevation=0,
         leading=ft.IconButton(
             ft.Icons.ARROW_BACK,
-            icon_color=Colors.PRIMARY,
+            icon_color=ft.Colors.WHITE,
             tooltip="Retour à l'accueil",
             on_click=lambda e: page.go(route_back),
         ),
@@ -374,7 +374,8 @@ def auth_appbar(page: ft.Page, route_back: str = "/") -> ft.AppBar:
 
 
 def auth_background(content: ft.Control) -> ft.Container:
-    """Fond dégradé doux pour les écrans d'authentification."""
+    """Fond dégradé doux pour les écrans d'authentification (usage général,
+    non glassmorphism — voir `glass_auth_background` pour login/signup)."""
     return ft.Container(
         expand=True,
         alignment=ft.alignment.center,
@@ -384,6 +385,124 @@ def auth_background(content: ft.Control) -> ft.Container:
             colors=[Colors.BLUE_LIGHT, Colors.BG],
         ),
         content=content,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GLASSMORPHISM (écrans d'authentification : connexion / inscription / mdp oublié)
+# Fond sombre et atmosphérique avec halos lumineux flous + carte "verre
+# dépoli" — volontairement fixe (pas de bascule clair/sombre ici, c'est un
+# choix esthétique dédié à ces 3 écrans, pas le thème général de l'app).
+# ---------------------------------------------------------------------------
+def _glow(color: str, size: int, top=None, bottom=None, left=None, right=None) -> ft.Container:
+    """Halo lumineux flou (effet bokeh), positionné librement dans un Stack."""
+    return ft.Container(
+        width=size, height=size,
+        top=top, bottom=bottom, left=left, right=right,
+        border_radius=size / 2,
+        bgcolor=ft.Colors.TRANSPARENT,
+        shadow=ft.BoxShadow(
+            blur_radius=size * 0.85,
+            spread_radius=size * 0.15,
+            color=ft.Colors.with_opacity(0.45, color),
+        ),
+    )
+
+
+def glass_auth_background(content: ft.Control) -> ft.Container:
+    """Fond sombre dégradé + halos lumineux flous, façon photo nocturne
+    bokeh — support visuel pour la carte en verre dépoli par-dessus."""
+    return ft.Container(
+        expand=True,
+        gradient=ft.LinearGradient(
+            begin=ft.alignment.top_left,
+            end=ft.alignment.bottom_right,
+            colors=["#0B1220", "#101B33", "#0A0F1A"],
+        ),
+        content=ft.Stack(
+            expand=True,
+            controls=[
+                _glow(BRAND_BLUE, 360, top=-140, left=-120),
+                _glow("#7C3AED", 320, bottom=-140, right=-100),
+                _glow(BRAND_BLUE, 220, top=180, right=-60),
+                ft.Container(expand=True, alignment=ft.alignment.center, content=content),
+            ],
+        ),
+    )
+
+
+def glass_card(content: ft.Control, width: int = 360, padding: int = 32) -> ft.Container:
+    """Carte "verre dépoli" (glassmorphism) : fond blanc translucide flouté,
+    fine bordure claire, ombre portée profonde."""
+    return ft.Container(
+        width=width,
+        padding=padding,
+        border_radius=24,
+        bgcolor=ft.Colors.with_opacity(0.10, ft.Colors.WHITE),
+        border=ft.border.all(1, ft.Colors.with_opacity(0.18, ft.Colors.WHITE)),
+        blur=ft.Blur(18, 18, ft.BlurTileMode.MIRROR),
+        shadow=ft.BoxShadow(
+            blur_radius=40, spread_radius=2,
+            color=ft.Colors.with_opacity(0.35, ft.Colors.BLACK),
+            offset=ft.Offset(0, 14),
+        ),
+        content=content,
+    )
+
+
+def glass_text_field(label: str, password: bool = False, icon=None, autofocus: bool = False) -> ft.TextField:
+    """Champ de formulaire clair sur fond sombre, pour les cartes en verre dépoli."""
+    return ft.TextField(
+        label=label,
+        password=password,
+        can_reveal_password=password,
+        prefix_icon=icon,
+        autofocus=autofocus,
+        color=ft.Colors.WHITE,
+        label_style=ft.TextStyle(color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE)),
+        hint_style=ft.TextStyle(color=ft.Colors.with_opacity(0.4, ft.Colors.WHITE)),
+        border_radius=RADIUS_INPUT,
+        border_color=ft.Colors.with_opacity(0.18, ft.Colors.WHITE),
+        focused_border_color=ft.Colors.with_opacity(0.65, ft.Colors.WHITE),
+        bgcolor=ft.Colors.with_opacity(0.06, ft.Colors.WHITE),
+        cursor_color=ft.Colors.WHITE,
+    )
+
+
+def gradient_icon_badge(icon=ft.Icons.AUTO_AWESOME_ROUNDED, size: int = 52) -> ft.Container:
+    """Badge carré à coins arrondis, dégradé bleu -> violet, pour l'en-tête
+    des cartes en verre dépoli (façon icône d'app premium)."""
+    return ft.Container(
+        width=size, height=size,
+        border_radius=size / 3.2,
+        gradient=ft.LinearGradient(
+            begin=ft.alignment.top_left, end=ft.alignment.bottom_right,
+            colors=[BRAND_BLUE, "#7C3AED"],
+        ),
+        alignment=ft.alignment.center,
+        content=ft.Icon(icon, color=ft.Colors.WHITE, size=size * 0.5),
+    )
+
+
+def gradient_button(text: str, on_click=None, icon=None, width: int = 300, height: int = 50) -> ft.Container:
+    """Bouton plein-largeur en pilule, dégradé bleu -> violet (CTA principal
+    des cartes en verre dépoli)."""
+    row_controls = []
+    if icon:
+        row_controls.append(ft.Icon(icon, color=ft.Colors.WHITE, size=18))
+    row_controls.append(ft.Text(text, color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15))
+    return ft.Container(
+        width=width,
+        height=height,
+        border_radius=height / 2,
+        gradient=ft.LinearGradient(
+            begin=ft.alignment.center_left, end=ft.alignment.center_right,
+            colors=[BRAND_BLUE_DARK, BRAND_BLUE, "#7C3AED"],
+        ),
+        ink=True,
+        on_click=on_click,
+        alignment=ft.alignment.center,
+        content=ft.Row(alignment=ft.MainAxisAlignment.CENTER, spacing=8, controls=row_controls),
     )
 
 

@@ -14,6 +14,7 @@ La bascule se fait automatiquement à partir de `page.width`
 import flet as ft
 
 from components import theme
+from services.supabase_service import forget_remembered_session
 
 # Chaque rôle a sa PROPRE navigation : un étudiant, un formateur et un
 # administrateur ne voient pas les mêmes sections ni la même page d'accueil.
@@ -131,6 +132,7 @@ def is_desktop(page: ft.Page) -> bool:
 def _logout(page: ft.Page):
     def handler(e):
         page.db.sign_out()
+        forget_remembered_session(page)
         _nav_state(page)["history"].clear()
         page.go("/login")
     return handler

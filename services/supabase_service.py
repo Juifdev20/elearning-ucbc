@@ -8,6 +8,20 @@ from uuid import uuid4
 from supabase import create_client, Client
 from config import SUPABASE_URL, SUPABASE_KEY
 
+# Clés de stockage local (page.client_storage, propre à l'appareil/navigateur)
+# pour la connexion persistante ("se souvenir de moi").
+ACCESS_TOKEN_KEY = "sb_access_token"
+REFRESH_TOKEN_KEY = "sb_refresh_token"
+
+
+def forget_remembered_session(page) -> None:
+    """Efface les jetons de connexion persistante de CET appareil (déconnexion)."""
+    try:
+        page.client_storage.remove(ACCESS_TOKEN_KEY)
+        page.client_storage.remove(REFRESH_TOKEN_KEY)
+    except Exception:
+        pass
+
 
 class SupabaseService:
     def __init__(self):
@@ -43,6 +57,25 @@ class SupabaseService:
         self.session = None
         self.current_user = None
         self.current_profile = None
+
+    def restore_session(self, access_token: str, refresh_token: str) -> bool:
+        """Restaure une session à partir des jetons sauvegardés sur l'appareil
+        (« se souvenir de moi ») — appelé au démarrage de l'app avant toute
+        navigation. Retourne False (sans lever d'exception) si les jetons
+        sont invalides/expirés : l'appelant retombe alors sur l'écran de
+        connexion normalement."""
+        if not access_token or not refresh_token:
+            return False
+        try:
+            result = self.client.auth.set_session(access_token, refresh_token)
+        except Exception:
+            return False
+        if not result or not result.user:
+            return False
+        self.session = result.session
+        self.current_user = result.user
+        self._load_profile()
+        return True
 
     def reset_password(self, email: str):
         """Envoie un email de réinitialisation de mot de passe (Supabase Auth)."""
@@ -196,6 +229,41 @@ class SupabaseService:
             "user_id": user_id, "quiz_id": quiz_id, "score": score, "passed": passed
         }).execute()
         return res.data[0] if res.data else None
+
+    def count_consecutive_failed_attempts(self, quiz_id: str) -> int:
+        """Nombre d'échecs consécutifs les plus récents (0 si la dernière
+        tentative est réussie, ou s'il n'y a encore aucune tentative).
+        Sert à décider si l'apprenant doit reprendre le cours en entier."""
+        res = (
+            self.client.table("quiz_attempts")
+            .select("passed")
+            .eq("user_id", self.current_user.id)
+            .eq("quiz_id", quiz_id)
+            .order("attempted_at", desc=True)
+            .limit(10)
+            .execute()
+        )
+        count = 0
+        for attempt in (res.data or []):
+            if attempt["passed"]:
+                break
+            count += 1
+        return count
+
+    def reset_course_progress(self, course_id: str):
+        """Efface la progression des leçons de l'apprenant pour ce cours
+        (après un 2e échec consécutif au quiz : il doit reprendre le cours)."""
+        lessons = self.get_lessons(course_id)
+        lesson_ids = [l["id"] for l in lessons]
+        if not lesson_ids:
+            return
+        (
+            self.client.table("lesson_progress")
+            .delete()
+            .eq("user_id", self.current_user.id)
+            .in_("lesson_id", lesson_ids)
+            .execute()
+        )
 
     def get_best_passed_score(self, course_id: str):
         """Meilleur score d'une tentative réussie pour le cours (ou None).
