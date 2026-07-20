@@ -156,8 +156,15 @@ La base, l'auth et la sécurité RLS sont hébergées chez Supabase.
 1. Poussez le code sur un dépôt Git (GitHub)
 2. Render → **New Web Service** → connectez le dépôt
 3. Build command : `pip install -r requirements.txt`
-4. Start command : `flet run --web --port $PORT --host 0.0.0.0 main.py`
+4. Start command : `python main.py`
 5. Variables d'environnement : `SUPABASE_URL`, `SUPABASE_KEY`
+
+> ⚠️ Ne pas utiliser `flet run` en production : cet outil CLI est prévu pour le
+> développement local (hot-reload) et importe un module optionnel
+> (`flet_desktop`) absent des serveurs headless comme Render, ce qui fait
+> planter le déploiement. `python main.py` appelle directement `ft.app(...)`,
+> qui détecte automatiquement l'environnement serveur (Linux + `$PORT`) et
+> sert l'app en HTTP sans dépendance desktop.
 
 ### Builds installables
 ```bash

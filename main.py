@@ -1,3 +1,5 @@
+import os
+
 import flet as ft
 
 from services.supabase_service import db
@@ -265,4 +267,11 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.app(target=main)
+    # Hébergement (Render...) : la plateforme impose son port via $PORT et
+    # n'a pas de package `flet_desktop` — on sert directement en HTTP.
+    # En local sans $PORT défini : comportement par défaut de `ft.app`.
+    render_port = os.environ.get("PORT")
+    if render_port:
+        ft.app(target=main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=int(render_port))
+    else:
+        ft.app(target=main)
