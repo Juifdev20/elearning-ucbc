@@ -4,11 +4,16 @@ le quiz final d'un cours.
 """
 import os
 import re
+from io import BytesIO
 from pathlib import Path
 from datetime import date
+
+import httpx
+from PIL import Image
 from reportlab.lib.pagesizes import landscape, A4
 from reportlab.lib.colors import HexColor
 from reportlab.lib.units import cm
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 # Les PDF sont écrits DANS le dossier assets/ (et non un dossier à part) pour
@@ -40,15 +45,35 @@ def certificate_url(student_name: str, course_title: str) -> str:
     return f"/certificates/{_filename(student_name, course_title)}"
 
 
-def ensure_certificate(student_name: str, course_title: str, score: int) -> str:
+def ensure_certificate(student_name: str, course_title: str, score: int, avatar_url: str = None) -> str:
     """Génère le certificat s'il n'existe pas encore, retourne son URL de téléchargement."""
     path = certificate_path(student_name, course_title)
     if not os.path.exists(path):
-        generate_certificate(student_name, course_title, score)
+        generate_certificate(student_name, course_title, score, avatar_url=avatar_url)
     return certificate_url(student_name, course_title)
 
 
-def generate_certificate(student_name: str, course_title: str, score: int) -> str:
+def _fetch_avatar(avatar_url: str):
+    """Télécharge la photo de profil et la prépare pour reportlab.
+
+    Best-effort : réseau/format invalide -> None, le certificat est alors
+    généré sans photo plutôt que d'échouer complètement.
+    """
+    if not avatar_url:
+        return None
+    try:
+        resp = httpx.get(avatar_url, timeout=5.0, follow_redirects=True)
+        resp.raise_for_status()
+        img = Image.open(BytesIO(resp.content)).convert("RGB")
+        buf = BytesIO()
+        img.save(buf, format="JPEG")
+        buf.seek(0)
+        return ImageReader(buf)
+    except Exception:
+        return None
+
+
+def generate_certificate(student_name: str, course_title: str, score: int, avatar_url: str = None) -> str:
     os.makedirs(CERT_DIR, exist_ok=True)
     filename = certificate_path(student_name, course_title)
 
@@ -61,6 +86,21 @@ def generate_certificate(student_name: str, course_title: str, score: int) -> st
     c.rect(1 * cm, 1 * cm, width - 2 * cm, height - 2 * cm)
     c.setLineWidth(1)
     c.rect(1.3 * cm, 1.3 * cm, width - 2.6 * cm, height - 2.6 * cm)
+
+    # Photo de profil (facultative) : médaillon circulaire en haut à gauche.
+    avatar = _fetch_avatar(avatar_url)
+    if avatar is not None:
+        cx, cy, r = 3 * cm, height - 3 * cm, 1.6 * cm
+        c.saveState()
+        path = c.beginPath()
+        path.circle(cx, cy, r)
+        c.clipPath(path, stroke=0)
+        c.drawImage(avatar, cx - r, cy - r, width=2 * r, height=2 * r,
+                    preserveAspectRatio=True, anchor="c", mask="auto")
+        c.restoreState()
+        c.setStrokeColor(HexColor("#1E3A8A"))
+        c.setLineWidth(2)
+        c.circle(cx, cy, r, stroke=1, fill=0)
 
     # Titre
     c.setFont("Helvetica-Bold", 34)

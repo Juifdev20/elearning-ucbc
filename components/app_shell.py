@@ -14,7 +14,6 @@ La bascule se fait automatiquement à partir de `page.width`
 import flet as ft
 
 from components import theme
-from services.supabase_service import db
 
 # Chaque rôle a sa PROPRE navigation : un étudiant, un formateur et un
 # administrateur ne voient pas les mêmes sections ni la même page d'accueil.
@@ -46,9 +45,9 @@ ADMIN_NAV_ITEMS = [
 ]
 
 
-def get_nav_items() -> list:
+def get_nav_items(page: ft.Page) -> list:
     """Navigation propre au rôle de l'utilisateur courant."""
-    role = (db.current_profile or {}).get("role", "student")
+    role = (page.db.current_profile or {}).get("role", "student")
     if role == "admin":
         return ADMIN_NAV_ITEMS
     if role == "instructor":
@@ -56,9 +55,9 @@ def get_nav_items() -> list:
     return STUDENT_NAV_ITEMS
 
 
-def home_route() -> str:
+def home_route(page: ft.Page) -> str:
     """Route d'accueil de l'utilisateur courant, selon son rôle."""
-    items = get_nav_items()
+    items = get_nav_items(page)
     return items[0][1] if items else "/dashboard"
 
 
@@ -82,8 +81,8 @@ def split_mobile_nav(nav_items: list) -> tuple[list, list]:
     return primary, secondary
 
 
-def _sidebar_subtitle() -> str:
-    role = (db.current_profile or {}).get("role", "student")
+def _sidebar_subtitle(page: ft.Page) -> str:
+    role = (page.db.current_profile or {}).get("role", "student")
     return {"admin": "ESPACE ADMINISTRATEUR", "instructor": "ESPACE FORMATEUR"}.get(
         role, "ESPACE APPRENANT")
 
@@ -92,23 +91,23 @@ SIDEBAR_WIDTH = 240
 SIDEBAR_WIDTH_COLLAPSED = 78
 
 # ---------------------------------------------------------------------------
-# ÉTAT PARTAGÉ DU SHELL (persiste entre les reconstructions de vues)
+# ÉTAT DU SHELL — attaché à CHAQUE `page` (jamais partagé entre sessions :
+# l'app sert plusieurs utilisateurs en parallèle depuis le même process ;
+# un état ici stocké au niveau du module mélangerait la sidebar réduite, la
+# recherche ou l'historique de navigation d'un utilisateur avec un autre).
 # ---------------------------------------------------------------------------
-_collapsed = {"on": False}          # sidebar réduite ?
-pending_search = {"q": ""}          # requête de la recherche globale -> dashboard
-_history = []                       # historique des routes principales (bouton retour)
-_refresh = {"fn": None}             # callback fourni par main.py pour reconstruire
-
-
-def set_refresh_handler(fn):
-    """main.py fournit ici sa fonction de reconstruction de la vue courante."""
-    _refresh["fn"] = fn
+def _nav_state(page: ft.Page) -> dict:
+    """Petit état de nav (sidebar réduite, historique) propre à cette session."""
+    if not hasattr(page, "_shell_state"):
+        page._shell_state = {"collapsed": False, "history": []}
+    return page._shell_state
 
 
 def _do_refresh(page: ft.Page):
     """Reconstruit la vue courante (dark mode, collapse, recherche…)."""
-    if _refresh["fn"]:
-        _refresh["fn"]()
+    refresh_fn = getattr(page, "refresh_view", None)
+    if refresh_fn:
+        refresh_fn()
     else:
         page.go(page.route)
 
@@ -131,8 +130,8 @@ def is_desktop(page: ft.Page) -> bool:
 
 def _logout(page: ft.Page):
     def handler(e):
-        db.sign_out()
-        _history.clear()
+        page.db.sign_out()
+        _nav_state(page)["history"].clear()
         page.go("/login")
     return handler
 
@@ -178,13 +177,13 @@ def _sidebar_item(page: ft.Page, label: str, route: str, icon, icon_selected,
 
 
 def _sidebar(page: ft.Page, nav_items: list, active_index: int) -> ft.Container:
-    collapsed = _collapsed["on"]
+    collapsed = _nav_state(page)["collapsed"]
 
     # Badge de notification sur "Cours à valider" (nombre de cours en attente).
     pending_count = 0
-    if db.is_admin():
+    if page.db.is_admin():
         try:
-            pending_count = len(db.get_pending_courses())
+            pending_count = len(page.db.get_pending_courses())
         except Exception:
             pending_count = 0
 
@@ -221,7 +220,7 @@ def _sidebar(page: ft.Page, nav_items: list, active_index: int) -> ft.Container:
                         controls=[
                             ft.Text("E-LEARNING", size=14, weight=ft.FontWeight.W_800,
                                     color=theme.Colors.PRIMARY),
-                            ft.Text(_sidebar_subtitle(), size=9, weight=ft.FontWeight.W_600,
+                            ft.Text(_sidebar_subtitle(page), size=9, weight=ft.FontWeight.W_600,
                                     color=theme.Colors.TEXT_MUTED),
                         ],
                     ),
@@ -263,7 +262,7 @@ def _sidebar(page: ft.Page, nav_items: list, active_index: int) -> ft.Container:
 def _notifications_dialog(page: ft.Page) -> ft.AlertDialog:
     """Dialogue de notifications, partagé desktop/mobile : dernières annonces."""
     try:
-        announcements = db.get_announcements(limit=5)
+        announcements = page.db.get_announcements(limit=5)
     except Exception:
         announcements = []
 
@@ -315,13 +314,14 @@ def _toolbar_icon(icon, tooltip, on_click, color=None) -> ft.IconButton:
 
 
 def _topbar(page: ft.Page, title: str, actions: list | None = None) -> ft.Container:
-    profile = db.current_profile or {}
+    profile = page.db.current_profile or {}
     full_name = profile.get("full_name", "Apprenant") or "Apprenant"
     role = (profile.get("role", "student") or "student").capitalize()
+    nav_state = _nav_state(page)
 
     # --- Réduire / étendre la sidebar ---
     def toggle_sidebar(e):
-        _collapsed["on"] = not _collapsed["on"]
+        nav_state["collapsed"] = not nav_state["collapsed"]
         _do_refresh(page)
 
     collapse_btn = ft.Container(
@@ -332,21 +332,22 @@ def _topbar(page: ft.Page, title: str, actions: list | None = None) -> ft.Contai
         bgcolor=theme.Colors.SURFACE,
         alignment=ft.alignment.center,
         ink=True,
-        tooltip="Étendre le menu" if _collapsed["on"] else "Réduire le menu",
+        tooltip="Étendre le menu" if nav_state["collapsed"] else "Réduire le menu",
         on_click=toggle_sidebar,
         content=ft.Icon(
-            ft.Icons.CHEVRON_RIGHT if _collapsed["on"] else ft.Icons.CHEVRON_LEFT,
+            ft.Icons.CHEVRON_RIGHT if nav_state["collapsed"] else ft.Icons.CHEVRON_LEFT,
             size=16, color=theme.Colors.TEXT_MUTED,
         ),
     )
 
     # --- Retour ---
     def go_back(e):
-        if len(_history) >= 2:
-            _history.pop()               # retire la route courante
-            page.go(_history[-1])        # revient à la précédente
+        history = nav_state["history"]
+        if len(history) >= 2:
+            history.pop()               # retire la route courante
+            page.go(history[-1])        # revient à la précédente
         else:
-            page.go(home_route())
+            page.go(home_route(page))
 
     # --- Refresh ---
     def do_refresh(e):
@@ -357,8 +358,8 @@ def _topbar(page: ft.Page, title: str, actions: list | None = None) -> ft.Contai
     def submit_search(e):
         query = (e.control.value or "").strip()
         e.control.value = ""
-        pending_search["q"] = query
-        role = (db.current_profile or {}).get("role", "student")
+        page.pending_search = query
+        role = (page.db.current_profile or {}).get("role", "student")
         destination = "/admin/courses" if role in ("instructor", "admin") else "/dashboard"
         if page.route == destination:
             _do_refresh(page)
@@ -411,7 +412,7 @@ def _topbar(page: ft.Page, title: str, actions: list | None = None) -> ft.Contai
 
     # --- Mode sombre ---
     def toggle_dark(e):
-        theme.set_dark(not theme.is_dark())
+        theme.set_dark(page, not theme.is_dark(page))
         page.theme_mode = ft.ThemeMode.DARK if theme.is_dark() else ft.ThemeMode.LIGHT
         page.bgcolor = theme.Colors.BG
         _do_refresh(page)
@@ -503,81 +504,86 @@ def _bottom_nav(page: ft.Page, nav_items: list, active_index: int | None) -> ft.
     )
 
 
-def _mobile_drawer(page: ft.Page, secondary_items: list) -> ft.NavigationDrawer:
-    """Tiroir latéral (☰) : options secondaires qui ne tiennent pas dans la
-    barre du bas, pour ne pas la surcharger. Ouvert/fermé via
-    page.open()/page.close() — le pattern documenté par Flet pour
-    NavigationDrawer. Note : selected_index retombe toujours à 0 côté Flet
-    (même en passant None au constructeur, la propriété n'a pas de vraie
-    valeur "aucune sélection") — purement cosmétique, sans incidence sur
-    l'ouverture/fermeture du tiroir."""
-    profile = db.current_profile or {}
+def _mobile_drawer(page: ft.Page, secondary_items: list) -> ft.AlertDialog:
+    """Menu (☰) : options secondaires qui ne tiennent pas dans la barre du
+    bas, pour ne pas la surcharger.
+
+    Implémenté comme un AlertDialog (liste + déconnexion), PAS comme un
+    ft.NavigationDrawer : ce dernier a un comportement peu fiable combiné à
+    ft.View() dans Flet 0.28 (cf. issues officielles flet-dev/flet #5163 et
+    discussion #2070 — le drawer ne s'ouvre/se ferme pas de façon fiable
+    quand la vue est reconstruite à chaque navigation, ce qui est notre cas).
+    Un AlertDialog ouvert/fermé via page.open()/page.close() est le mécanisme
+    déjà utilisé (et fiable) partout ailleurs dans l'app (notifications,
+    confirmations, etc.) — on réutilise volontairement ce même mécanisme
+    plutôt que le contrôle dédié, justement parce qu'il est fiable."""
+    profile = page.db.current_profile or {}
     full_name = profile.get("full_name", "Utilisateur") or "Utilisateur"
 
-    def on_change(e):
-        route = secondary_items[e.control.selected_index][1]
-        page.close(drawer)
-        if page.route != route:
-            page.go(route)
+    def go_to(route):
+        def handler(e):
+            page.close(dlg)
+            if page.route != route:
+                page.go(route)
+        return handler
 
     def do_logout(e):
-        page.close(drawer)
+        page.close(dlg)
         _logout(page)(e)
 
-    drawer = ft.NavigationDrawer(
-        bgcolor=theme.Colors.SURFACE,
-        indicator_color=theme.tint(theme.Colors.PRIMARY_ACTION, 0.14),
-        on_change=on_change,
-        controls=[
-            ft.Container(
-                padding=ft.padding.symmetric(horizontal=16, vertical=20),
-                content=ft.Row(
-                    spacing=12,
+    items = [
+        ft.ListTile(
+            leading=ft.Icon(icon, color=theme.Colors.TEXT_MUTED),
+            title=ft.Text(label, size=14, color=theme.Colors.TEXT),
+            on_click=go_to(route),
+        )
+        for (label, route, icon, _sel) in secondary_items
+    ]
+
+    dlg = ft.AlertDialog(
+        title=ft.Row(
+            spacing=12,
+            controls=[
+                theme.brand_logo(size=36),
+                ft.Column(
+                    spacing=0,
                     controls=[
-                        theme.brand_logo(size=40),
-                        ft.Column(
-                            spacing=0,
-                            controls=[
-                                ft.Text(full_name, size=14, weight=ft.FontWeight.W_700,
-                                        color=theme.Colors.TEXT),
-                                ft.Text(_sidebar_subtitle(), size=10, weight=ft.FontWeight.W_600,
-                                        color=theme.Colors.TEXT_MUTED),
-                            ],
-                        ),
+                        ft.Text(full_name, size=14, weight=ft.FontWeight.W_700,
+                                color=theme.Colors.TEXT),
+                        ft.Text(_sidebar_subtitle(page), size=10, weight=ft.FontWeight.W_600,
+                                color=theme.Colors.TEXT_MUTED),
                     ],
                 ),
-            ),
-            ft.Divider(height=1, color=theme.Colors.BORDER),
-            *[
-                ft.NavigationDrawerDestination(label=label, icon=icon, selected_icon=sel)
-                for (label, _route, icon, sel) in secondary_items
             ],
-            ft.Divider(height=1, color=theme.Colors.BORDER),
-            ft.Container(
-                padding=ft.padding.symmetric(horizontal=16, vertical=14),
-                ink=True,
-                on_click=do_logout,
-                content=ft.Row(
-                    spacing=12,
-                    controls=[
-                        ft.Icon(ft.Icons.LOGOUT, size=20, color=theme.Colors.ERROR),
-                        ft.Text("Déconnexion", size=13, weight=ft.FontWeight.W_600,
-                                color=theme.Colors.ERROR),
-                    ],
-                ),
+        ),
+        content=ft.Container(
+            width=300,
+            content=ft.Column(
+                tight=True,
+                spacing=0,
+                scroll=ft.ScrollMode.AUTO,
+                controls=[
+                    *items,
+                    ft.Divider(height=1, color=theme.Colors.BORDER),
+                    ft.ListTile(
+                        leading=ft.Icon(ft.Icons.LOGOUT, color=theme.Colors.ERROR),
+                        title=ft.Text("Déconnexion", size=14, color=theme.Colors.ERROR),
+                        on_click=do_logout,
+                    ),
+                ],
             ),
-        ],
+        ),
     )
-    return drawer
+    return dlg
 
 
 def _mobile_appbar(page: ft.Page, title: str, actions: list | None = None,
-                   drawer: ft.NavigationDrawer | None = None) -> ft.AppBar:
-    profile = db.current_profile or {}
+                   drawer: ft.AlertDialog | None = None) -> ft.AppBar:
+    profile = page.db.current_profile or {}
     full_name = profile.get("full_name", "A") or "A"
 
     def toggle_dark(e):
-        theme.set_dark(not theme.is_dark())
+        theme.set_dark(page, not theme.is_dark(page))
         page.theme_mode = ft.ThemeMode.DARK if theme.is_dark() else ft.ThemeMode.LIGHT
         page.bgcolor = theme.Colors.BG
         _do_refresh(page)
@@ -635,15 +641,16 @@ def shell_view(
     (étudiant, formateur ou administrateur), avec la navigation adaptée
     au rôle ET à la taille d'écran.
     """
-    nav_items = get_nav_items()
+    nav_items = get_nav_items(page)
     route = page.route
     active_index = next(
         (i for i, (_label, r, _icon, _sel) in enumerate(nav_items) if r == route), 0
     )
 
     # Historique pour le bouton retour de la topbar.
-    if not _history or _history[-1] != route:
-        _history.append(route)
+    history = _nav_state(page)["history"]
+    if not history or history[-1] != route:
+        history.append(route)
 
     if is_desktop(page):
         layout = ft.Row(

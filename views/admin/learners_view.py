@@ -1,14 +1,13 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 
 
 def build_learners_view(page: ft.Page, course_id: str) -> ft.View:
     """Vue formateur : apprenants inscrits à un cours et leur progression."""
-    course = db.get_course(course_id)
+    course = page.db.get_course(course_id)
     try:
-        learners = db.get_course_learners(course_id)
+        learners = page.db.get_course_learners(course_id)
     except Exception:
         learners = []
 
@@ -31,7 +30,8 @@ def build_learners_view(page: ft.Page, course_id: str) -> ft.View:
                         expand=True,
                         spacing=4,
                         controls=[
-                            ft.Text(name, weight=ft.FontWeight.W_600, color=theme.Colors.TEXT),
+                            ft.Text(name, weight=ft.FontWeight.W_600, color=theme.Colors.TEXT,
+                                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                             theme.progress_bar(p),
                         ],
                     ),
@@ -61,6 +61,7 @@ def build_learners_view(page: ft.Page, course_id: str) -> ft.View:
         controls=[
             ft.Container(
                 padding=20,
+                expand=True,
                 content=ft.Column(
                     scroll=ft.ScrollMode.AUTO,
                     controls=[

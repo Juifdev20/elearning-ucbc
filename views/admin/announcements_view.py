@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -8,7 +7,7 @@ from components.app_shell import shell_view
 def build_announcements_view(page: ft.Page) -> ft.View:
     """Vue ADMIN : diffusion d'annonces vers tous les utilisateurs (cloche 🔔)."""
     try:
-        announcements = db.get_announcements(limit=30)
+        announcements = page.db.get_announcements(limit=30)
     except Exception:
         announcements = None  # None = table absente (migration non exécutée)
 
@@ -31,7 +30,7 @@ def build_announcements_view(page: ft.Page) -> ft.View:
             page.update()
             return
         try:
-            db.create_announcement(title_field.value.strip(),
+            page.db.create_announcement(title_field.value.strip(),
                                    (message_field.value or "").strip())
             page.go("/admin/announcements")  # reconstruit la liste
         except Exception:
@@ -42,7 +41,7 @@ def build_announcements_view(page: ft.Page) -> ft.View:
     def delete_announcement(ann_id):
         def handler(e):
             try:
-                db.delete_announcement(ann_id)
+                page.db.delete_announcement(ann_id)
             except Exception:
                 pass
             page.go("/admin/announcements")
@@ -78,7 +77,8 @@ def build_announcements_view(page: ft.Page) -> ft.View:
                         spacing=3,
                         controls=[
                             ft.Text(ann.get("title", ""), weight=ft.FontWeight.W_700, size=14,
-                                    color=theme.Colors.TEXT),
+                                    color=theme.Colors.TEXT,
+                                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                             ft.Text(ann.get("message", ""), size=12, color=theme.Colors.TEXT_MUTED,
                                     max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
                             ft.Text(f"Par {author} · {created}", size=11,

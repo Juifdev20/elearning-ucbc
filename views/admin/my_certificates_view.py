@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -8,7 +7,7 @@ from components.app_shell import shell_view
 def build_my_certificates_view(page: ft.Page) -> ft.View:
     """Vue FORMATEUR : certificats délivrés pour ses propres cours."""
     try:
-        certificates = db.get_my_issued_certificates()
+        certificates = page.db.get_my_issued_certificates()
     except Exception:
         certificates = []
 
@@ -33,8 +32,10 @@ def build_my_certificates_view(page: ft.Page) -> ft.View:
                         spacing=2,
                         controls=[
                             ft.Text(student, weight=ft.FontWeight.W_700, size=14,
-                                    color=theme.Colors.TEXT),
-                            ft.Text(course_title, size=12, color=theme.Colors.TEXT_MUTED),
+                                    color=theme.Colors.TEXT,
+                                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                            ft.Text(course_title, size=12, color=theme.Colors.TEXT_MUTED,
+                                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                         ],
                     ),
                     ft.Text(issued_at, size=12, color=theme.Colors.TEXT_MUTED),

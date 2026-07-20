@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -46,7 +45,7 @@ def _legend_dot(label: str, color: str, value) -> ft.Row:
 def build_overview_view(page: ft.Page) -> ft.View:
     """Vue d'ensemble ADMIN : KPIs globaux + graphiques + activité récente."""
     try:
-        stats = db.get_platform_stats()
+        stats = page.db.get_platform_stats()
     except Exception:
         stats = {
             "total_courses": 0, "published_courses": 0, "total_users": 0,
@@ -54,11 +53,11 @@ def build_overview_view(page: ft.Page) -> ft.View:
             "total_certificates": 0, "success_rate": 0.0,
         }
     try:
-        top_courses = db.get_enrollments_per_course()
+        top_courses = page.db.get_enrollments_per_course()
     except Exception:
         top_courses = []
     try:
-        recent_users = db.get_recent_signups()
+        recent_users = page.db.get_recent_signups()
     except Exception:
         recent_users = []
 

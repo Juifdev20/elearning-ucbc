@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -9,9 +8,9 @@ _MEDALS = {0: ("🥇", "#F59E0B"), 1: ("🥈", "#9CA3AF"), 2: ("🥉", "#B45309"
 
 def build_leaderboard_view(page: ft.Page) -> ft.View:
     """Onglet CLASSEMENT : gamification — top apprenants de la plateforme."""
-    my_id = db.current_user.id if db.current_user else None
+    my_id = page.db.current_user.id if page.db.current_user else None
     try:
-        ranking = db.get_leaderboard(limit_n=20)
+        ranking = page.db.get_leaderboard(limit_n=20)
         unavailable = False
     except Exception:
         ranking = []
@@ -54,9 +53,13 @@ def build_leaderboard_view(page: ft.Page) -> ft.View:
                             ft.Row(
                                 spacing=8,
                                 controls=[
-                                    ft.Text(entry.get("full_name", "Apprenant"),
-                                            weight=ft.FontWeight.W_700, size=14,
-                                            color=theme.Colors.TEXT),
+                                    ft.Container(
+                                        expand=True,
+                                        content=ft.Text(entry.get("full_name", "Apprenant"),
+                                                        weight=ft.FontWeight.W_700, size=14,
+                                                        color=theme.Colors.TEXT,
+                                                        max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                    ),
                                     theme.chip("Vous", theme.Colors.SUCCESS) if is_me else ft.Container(),
                                 ],
                             ),

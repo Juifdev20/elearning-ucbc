@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from services.certificate_service import ensure_certificate
 from components import theme
 from components.app_shell import shell_view
@@ -8,10 +7,10 @@ from components.app_shell import shell_view
 
 def build_certificates_view(page: ft.Page) -> ft.View:
     """Onglet CERTIFICATS : tous les brevets obtenus par l'apprenant, téléchargeables."""
-    profile = db.current_profile or {}
+    profile = page.db.current_profile or {}
     full_name = profile.get("full_name", "") or "Apprenant"
     try:
-        certificates = db.get_my_certificates()
+        certificates = page.db.get_my_certificates()
     except Exception:
         certificates = []
 
@@ -19,12 +18,13 @@ def build_certificates_view(page: ft.Page) -> ft.View:
         def handler(e):
             score = 100
             try:
-                s = db.get_best_passed_score(course_id)
+                s = page.db.get_best_passed_score(course_id)
                 if s is not None:
                     score = s
             except Exception:
                 pass
-            page.launch_url(ensure_certificate(full_name, course_title, score))
+            page.launch_url(ensure_certificate(full_name, course_title, score,
+                                               avatar_url=profile.get("avatar_url")))
         return handler
 
     def cert_card(cert):

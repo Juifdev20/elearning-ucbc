@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from services.certificate_service import ensure_certificate
 from components import theme
 from components.app_shell import shell_view
@@ -9,35 +8,37 @@ from components.app_shell import shell_view
 def build_certificates_view(page: ft.Page) -> ft.View:
     """Vue ADMIN : tous les certificats délivrés sur la plateforme."""
     try:
-        certificates = db.get_all_certificates()
+        certificates = page.db.get_all_certificates()
     except Exception:
         certificates = []
 
     all_rows = []
     for cert in certificates:
-        student = (cert.get("profiles") or {}).get("full_name", "Apprenant")
+        profile = cert.get("profiles") or {}
+        student = profile.get("full_name", "Apprenant")
+        avatar_url = profile.get("avatar_url")
         course_title = (cert.get("courses") or {}).get("title", "Cours")
         issued_at = (cert.get("issued_at") or "")[:10]
-        all_rows.append((student, course_title, issued_at, cert))
+        all_rows.append((student, course_title, issued_at, cert, avatar_url))
 
     rows_col = ft.Column(spacing=10)
     empty_msg = theme.body("Aucun certificat ne correspond à votre recherche.", muted=True)
     empty_msg.visible = False
 
-    def download(student, course_title):
+    def download(student, course_title, avatar_url):
         def handler(e):
             score = 100
             try:
-                s = db.get_best_passed_score(next(
-                    (c["course_id"] for _, t, _, c in all_rows if t == course_title), ""))
+                s = page.db.get_best_passed_score(next(
+                    (c["course_id"] for _, t, _, c, _a in all_rows if t == course_title), ""))
                 if s is not None:
                     score = s
             except Exception:
                 pass
-            page.launch_url(ensure_certificate(student, course_title, score))
+            page.launch_url(ensure_certificate(student, course_title, score, avatar_url=avatar_url))
         return handler
 
-    def cert_row(student, course_title, issued_at):
+    def cert_row(student, course_title, issued_at, avatar_url):
         return theme.card(
             padding=14,
             content=ft.Row(
@@ -49,8 +50,10 @@ def build_certificates_view(page: ft.Page) -> ft.View:
                         spacing=2,
                         controls=[
                             ft.Text(student, weight=ft.FontWeight.W_700, size=14,
-                                    color=theme.Colors.TEXT),
-                            ft.Text(course_title, size=12, color=theme.Colors.TEXT_MUTED),
+                                    color=theme.Colors.TEXT,
+                                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                            ft.Text(course_title, size=12, color=theme.Colors.TEXT_MUTED,
+                                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                         ],
                     ),
                     ft.Text(issued_at, size=12, color=theme.Colors.TEXT_MUTED),
@@ -58,7 +61,7 @@ def build_certificates_view(page: ft.Page) -> ft.View:
                         icon=ft.Icons.DOWNLOAD,
                         icon_color=theme.Colors.PRIMARY_ACTION,
                         tooltip="Télécharger le PDF",
-                        on_click=download(student, course_title),
+                        on_click=download(student, course_title, avatar_url),
                     ),
                 ],
             ),
@@ -67,7 +70,7 @@ def build_certificates_view(page: ft.Page) -> ft.View:
     def apply_search(e=None):
         q = (search_field.value or "").strip().lower()
         filtered = [r for r in all_rows if q in r[0].lower() or q in r[1].lower()] if q else all_rows
-        rows_col.controls = [cert_row(s, c, d) for s, c, d, _ in filtered]
+        rows_col.controls = [cert_row(s, c, d, a) for s, c, d, _, a in filtered]
         empty_msg.visible = len(filtered) == 0 and len(all_rows) > 0
         page.update()
 
@@ -82,7 +85,7 @@ def build_certificates_view(page: ft.Page) -> ft.View:
         on_change=apply_search,
     )
 
-    rows_col.controls = [cert_row(s, c, d) for s, c, d, _ in all_rows] if all_rows else [
+    rows_col.controls = [cert_row(s, c, d, a) for s, c, d, _, a in all_rows] if all_rows else [
         theme.card(
             padding=32,
             content=ft.Column(

@@ -1,21 +1,20 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
-from components.app_shell import shell_view, pending_search
+from components.app_shell import shell_view
 
 
 def build_dashboard_view(page: ft.Page) -> ft.View:
     """Onglet TABLEAU DE BORD : salutation, stats, reprise de cours, catalogue."""
-    courses = db.get_courses()
-    profile = db.current_profile or {}
+    courses = page.db.get_courses()
+    profile = page.db.current_profile or {}
     full_name = profile.get("full_name", "Apprenant") or "Apprenant"
     first_name = full_name.split(" ")[0]
 
     # Inscriptions + progression (une requête, réutilisée partout).
     enrollments = []
     try:
-        enrollments = db.get_my_enrollments()
+        enrollments = page.db.get_my_enrollments()
     except Exception:
         pass
     enrolled_ids = {en["course_id"] for en in enrollments}
@@ -23,12 +22,12 @@ def build_dashboard_view(page: ft.Page) -> ft.View:
     progress_by_course = {}
     for cid in enrolled_ids:
         try:
-            progress_by_course[cid] = db.get_course_progress(cid)
+            progress_by_course[cid] = page.db.get_course_progress(cid)
         except Exception:
             progress_by_course[cid] = 0
 
     try:
-        certificates = db.get_my_certificates()
+        certificates = page.db.get_my_certificates()
     except Exception:
         certificates = []
 
@@ -122,6 +121,7 @@ def build_dashboard_view(page: ft.Page) -> ft.View:
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 controls=[
                     ft.Column(
+                        expand=True,
                         spacing=6,
                         controls=[
                             ft.Text("Commencez votre apprentissage 🚀", size=20,
@@ -254,8 +254,8 @@ def build_dashboard_view(page: ft.Page) -> ft.View:
     )
 
     # Recherche globale envoyée depuis la topbar : pré-remplit et filtre.
-    global_q = pending_search.get("q", "")
-    pending_search["q"] = ""
+    global_q = getattr(page, "pending_search", "")
+    page.pending_search = ""
     if global_q:
         search_field.value = global_q
 

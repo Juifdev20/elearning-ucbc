@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 
 
@@ -29,7 +28,7 @@ def build_signup_view(page: ft.Page) -> ft.View:
         page.update()
 
         try:
-            db.sign_up(email_field.value.strip(), password_field.value, name_field.value.strip())
+            page.db.sign_up(email_field.value.strip(), password_field.value, name_field.value.strip())
             success_text.value = "Compte créé ! Vous pouvez vous connecter."
         except Exception:
             error_text.value = "Erreur lors de l'inscription. Cet email est peut-être déjà utilisé."
@@ -38,12 +37,13 @@ def build_signup_view(page: ft.Page) -> ft.View:
             signup_btn.disabled = False
             page.update()
 
-    signup_btn = theme.primary_button("Créer mon compte", icon=ft.Icons.PERSON_ADD_ALT_1, on_click=do_signup)
+    signup_btn = theme.primary_button("Créer mon compte", icon=ft.Icons.PERSON_ADD_ALT_1, width=240, on_click=do_signup)
 
     return ft.View(
         route="/signup",
         bgcolor=theme.Colors.BG,
         padding=0,
+        appbar=theme.auth_appbar(page),
         controls=[
             theme.auth_background(
                 ft.Column(

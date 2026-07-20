@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 
 
@@ -18,15 +17,15 @@ def _field(label, value="", multiline=False, width=None):
 
 def build_quiz_editor_view(page: ft.Page, course_id: str) -> ft.View:
     """Éditeur du quiz final d'un cours : seuil, questions, options, bonne réponse."""
-    course = db.get_course(course_id)
-    quiz = db.get_or_create_quiz(course_id)
+    course = page.db.get_course(course_id)
+    quiz = page.db.get_or_create_quiz(course_id)
     quiz_id = quiz["id"] if quiz else None
 
     def load_questions():
         if not quiz_id:
             return []
         res = (
-            db.client.table("quiz_questions")
+            page.db.client.table("quiz_questions")
             .select("*, quiz_options(*)")
             .eq("quiz_id", quiz_id)
             .order("position")
@@ -42,7 +41,7 @@ def build_quiz_editor_view(page: ft.Page, course_id: str) -> ft.View:
         try:
             val = int(pass_f.value)
             val = max(0, min(100, val))
-            db.update_quiz(quiz_id, {"pass_score": val})
+            page.db.update_quiz(quiz_id, {"pass_score": val})
             pass_f.value = str(val)
             pass_feedback.value = "Seuil enregistré ✓"
             pass_feedback.color = theme.Colors.SUCCESS
@@ -68,7 +67,7 @@ def build_quiz_editor_view(page: ft.Page, course_id: str) -> ft.View:
 
     def delete_question(qid):
         def handler(e):
-            db.delete_question(qid)  # options supprimées en cascade (FK on delete cascade)
+            page.db.delete_question(qid)  # options supprimées en cascade (FK on delete cascade)
             refresh_questions()
         return handler
 
@@ -136,9 +135,9 @@ def build_quiz_editor_view(page: ft.Page, course_id: str) -> ft.View:
             page.update()
             return
         try:
-            question = db.create_question(quiz_id, q_text.value.strip())
+            question = page.db.create_question(quiz_id, q_text.value.strip())
             for i, text in filled:
-                db.create_option(question["id"], text, is_correct=(i == correct_index))
+                page.db.create_option(question["id"], text, is_correct=(i == correct_index))
             # Réinitialise le formulaire.
             q_text.value = ""
             for f in opt_fields:
@@ -171,7 +170,7 @@ def build_quiz_editor_view(page: ft.Page, course_id: str) -> ft.View:
             controls=[
                 theme.subtitle("Seuil de réussite"),
                 ft.Row([pass_f, theme.primary_button("Enregistrer", width=160, on_click=save_pass)],
-                       spacing=12, vertical_alignment=ft.CrossAxisAlignment.START),
+                       spacing=12, wrap=True, vertical_alignment=ft.CrossAxisAlignment.START),
                 pass_feedback,
             ],
         ),
@@ -190,6 +189,7 @@ def build_quiz_editor_view(page: ft.Page, course_id: str) -> ft.View:
         controls=[
             ft.Container(
                 padding=20,
+                expand=True,
                 content=ft.Column(
                     scroll=ft.ScrollMode.AUTO,
                     controls=[

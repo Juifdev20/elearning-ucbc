@@ -2,9 +2,9 @@ import os
 
 import flet as ft
 
-from services.supabase_service import db
+from services.supabase_service import SupabaseService
 from components import theme
-from components.app_shell import is_desktop, set_refresh_handler, shell_view, home_route
+from components.app_shell import is_desktop, shell_view, home_route
 from components.loading import build_loading_view, build_error_view, loading_body
 from views.landing_view import build_landing_view
 from views.login_view import build_login_view
@@ -35,6 +35,12 @@ from views.admin.announcements_view import build_announcements_view
 
 
 def main(page: ft.Page):
+    # Une instance Supabase PAR SESSION : l'app est servie en web à plusieurs
+    # utilisateurs en parallèle depuis le même process, une instance partagée
+    # mélangerait les comptes connectés entre eux. Tout le code accède au
+    # backend via `page.db`, jamais via un `db` importé globalement.
+    page.db = SupabaseService()
+    page.dark_mode = False  # préférence clair/sombre : propre à CETTE session
     page.title = "E-Learning UCBC"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.theme = theme.app_theme()
@@ -84,8 +90,8 @@ def main(page: ft.Page):
         if page.route == "/":
             # Page d'accueil publique (marketing). Un utilisateur déjà
             # connecté est redirigé directement vers son espace.
-            if db.current_user:
-                page.go(home_route())
+            if page.db.current_user:
+                page.go(home_route(page))
                 return None
             return build_landing_view(page)
 
@@ -96,25 +102,25 @@ def main(page: ft.Page):
             return build_forgot_password_view(page)
 
         if page.route == "/dashboard":
-            if not db.current_user:
+            if not page.db.current_user:
                 page.go("/login")
                 return None
             return build_dashboard_view(page)
 
         if page.route == "/my-courses":
-            if not db.current_user:
+            if not page.db.current_user:
                 page.go("/login")
                 return None
             return build_my_courses_view(page)
 
         if page.route == "/progress":
-            if not db.current_user:
+            if not page.db.current_user:
                 page.go("/login")
                 return None
             return build_progress_view(page)
 
         if page.route.startswith("/course/"):
-            if not db.current_user:
+            if not page.db.current_user:
                 page.go("/login")
                 return None
             course_id = page.route.split("/course/")[1].split("/")[0]
@@ -129,30 +135,30 @@ def main(page: ft.Page):
             return build_course_detail_view(page, course_id)
 
         if page.route == "/certificates":
-            if not db.current_user:
+            if not page.db.current_user:
                 page.go("/login")
                 return None
             return build_certificates_view(page)
 
         if page.route == "/leaderboard":
-            if not db.current_user:
+            if not page.db.current_user:
                 page.go("/login")
                 return None
             return build_leaderboard_view(page)
 
         if page.route == "/profile":
-            if not db.current_user:
+            if not page.db.current_user:
                 page.go("/login")
                 return None
             return build_profile_view(page)
 
         if page.route.startswith("/instructor"):
             # Espace réservé aux formateurs (l'admin a son propre "/admin").
-            if not db.current_user:
+            if not page.db.current_user:
                 page.go("/login")
                 return None
-            if (db.current_profile or {}).get("role") != "instructor":
-                page.go(home_route())
+            if (page.db.current_profile or {}).get("role") != "instructor":
+                page.go(home_route(page))
                 return None
             if page.route == "/instructor/students":
                 return build_my_students_view(page)
@@ -162,10 +168,10 @@ def main(page: ft.Page):
 
         if page.route.startswith("/admin"):
             # Espace réservé aux formateurs / administrateurs.
-            if not db.current_user:
+            if not page.db.current_user:
                 page.go("/login")
                 return None
-            if not db.is_staff():
+            if not page.db.is_staff():
                 page.go("/dashboard")
                 return None
 
@@ -175,7 +181,7 @@ def main(page: ft.Page):
                 "/admin", "/admin/users", "/admin/certificates",
                 "/admin/categories", "/admin/announcements", "/admin/pending-courses",
             }
-            if page.route in ADMIN_ONLY_ROUTES and not db.is_admin():
+            if page.route in ADMIN_ONLY_ROUTES and not page.db.is_admin():
                 page.go("/admin/courses")
                 return None
 
@@ -203,7 +209,7 @@ def main(page: ft.Page):
                     return build_learners_view(page, admin_course_id)
                 return build_course_editor_view(page, admin_course_id)
             # Route /admin/* non reconnue : repli sur la page d'accueil du rôle.
-            return build_overview_view(page) if db.is_admin() else build_admin_dashboard_view(page)
+            return build_overview_view(page) if page.db.is_admin() else build_admin_dashboard_view(page)
 
         # "/login" par défaut
         return build_login_view(page)
@@ -216,7 +222,7 @@ def main(page: ft.Page):
         #    - boutons à l'intérieur des pages (cours, leçon, quiz, admin)
         #      -> loader plein écran ;
         #    - routes instantanées (auth) -> aucun loader.
-        if page.route in SHELL_ROUTES and db.current_user:
+        if page.route in SHELL_ROUTES and page.db.current_user:
             title = SHELL_ROUTES[page.route]
             page.views.clear()
             page.views.append(shell_view(page, title, loading_body()))
@@ -261,8 +267,9 @@ def main(page: ft.Page):
     # NB : dans Flet 0.28 l'événement s'appelle bien "on_resized" (et non "on_resize").
     page.on_resized = on_resized
     # La topbar (refresh, dark mode, recherche, sidebar réductible) reconstruit
-    # la vue courante via ce callback.
-    set_refresh_handler(lambda: route_change(None))
+    # la vue courante via ce callback — stocké SUR la page (pas dans un état
+    # partagé entre sessions) pour ne jamais rafraîchir le mauvais utilisateur.
+    page.refresh_view = lambda: route_change(None)
     page.go(page.route)
 
 
@@ -270,8 +277,12 @@ if __name__ == "__main__":
     # Hébergement (Render...) : la plateforme impose son port via $PORT et
     # n'a pas de package `flet_desktop` — on sert directement en HTTP.
     # En local sans $PORT défini : comportement par défaut de `ft.app`.
+    # upload_dir : dossier temporaire local requis par Flet pour recevoir les
+    # fichiers (photo de profil) avant qu'on les transfère vers Supabase
+    # Storage — voir services/supabase_service.py:upload_avatar().
     render_port = os.environ.get("PORT")
     if render_port:
-        ft.app(target=main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0", port=int(render_port))
+        ft.app(target=main, view=ft.AppView.WEB_BROWSER, host="0.0.0.0",
+              port=int(render_port), upload_dir="uploads")
     else:
-        ft.app(target=main)
+        ft.app(target=main, upload_dir="uploads")

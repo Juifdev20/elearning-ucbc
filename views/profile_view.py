@@ -1,37 +1,92 @@
+import os
+
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
 
 def build_profile_view(page: ft.Page) -> ft.View:
-    """Onglet PROFIL : identité, statistiques et raccourcis vers les pages dédiées."""
-    profile = db.current_profile or {}
+    """Onglet PROFIL : identité modifiable (nom, photo, mot de passe — tous
+    rôles), statistiques et raccourcis vers les pages dédiées (étudiant)."""
+    profile = page.db.current_profile or {}
     is_student = (profile.get("role", "student") or "student") == "student"
 
     enrollments, certificates = [], []
     if is_student:
         try:
-            enrollments = db.get_my_enrollments()
+            enrollments = page.db.get_my_enrollments()
         except Exception:
             enrollments = []
         try:
-            certificates = db.get_my_certificates()
+            certificates = page.db.get_my_certificates()
         except Exception:
             certificates = []
 
     def logout(e):
-        db.sign_out()
+        page.db.sign_out()
         page.go("/login")
 
     full_name = profile.get("full_name", "") or "Apprenant"
     role = (profile.get("role", "student") or "student").capitalize()
-    email = getattr(db.current_user, "email", "") or ""
+    email = getattr(page.db.current_user, "email", "") or ""
+    avatar_url = profile.get("avatar_url")
 
     # ------------------------------------------------------------------
-    # EN-TÊTE : bannière dégradée + avatar + identité
+    # EN-TÊTE : bannière dégradée + avatar (modifiable) + identité
     # ------------------------------------------------------------------
+    avatar_display = ft.CircleAvatar(
+        foreground_image_src=avatar_url,
+        content=ft.Text(full_name[:1].upper(), size=26, weight=ft.FontWeight.BOLD),
+        radius=34,
+        bgcolor=ft.Colors.WHITE,
+        color=theme.Colors.PRIMARY,
+    )
+    avatar_feedback = ft.Text("", size=11, color=ft.Colors.WHITE)
+
+    def on_avatar_uploaded(e: ft.FilePickerUploadEvent):
+        if e.error:
+            avatar_feedback.value = "Échec de l'envoi."
+            page.update()
+            return
+        if e.progress == 1:
+            local_path = os.path.join("uploads", e.file_name)
+            try:
+                ext = e.file_name.rsplit(".", 1)[-1] if "." in e.file_name else "jpg"
+                new_url = page.db.upload_avatar(local_path, ext)
+                avatar_display.foreground_image_src = new_url
+                avatar_feedback.value = "Photo mise à jour ✓"
+            except Exception:
+                avatar_feedback.value = "Échec (bucket 'avatars' créé ? sql/avatars_storage.sql)"
+            finally:
+                try:
+                    os.remove(local_path)
+                except OSError:
+                    pass
+                page.update()
+
+    def on_avatar_picked(e: ft.FilePickerResultEvent):
+        if not e.files:
+            return
+        f = e.files[0]
+        avatar_feedback.value = "Envoi en cours…"
+        page.update()
+        upload_url = page.get_upload_url(f.name, 600)
+        avatar_picker.upload([ft.FilePickerUploadFile(f.name, upload_url=upload_url)])
+
+    avatar_picker = ft.FilePicker(on_result=on_avatar_picked, on_upload=on_avatar_uploaded)
+    page.overlay.append(avatar_picker)
+
+    change_photo_btn = ft.TextButton(
+        "Changer la photo",
+        icon=ft.Icons.CAMERA_ALT_OUTLINED,
+        on_click=lambda e: avatar_picker.pick_files(
+            allow_multiple=False,
+            file_type=ft.FilePickerFileType.IMAGE,
+        ),
+        style=ft.ButtonStyle(color=ft.Colors.WHITE),
+    )
+
     header = ft.Container(
         border_radius=20,
         gradient=theme.brand_gradient(),
@@ -39,18 +94,19 @@ def build_profile_view(page: ft.Page) -> ft.View:
         content=ft.Row(
             spacing=18,
             controls=[
-                ft.CircleAvatar(
-                    content=ft.Text(full_name[:1].upper(), size=26, weight=ft.FontWeight.BOLD),
-                    radius=34,
-                    bgcolor=ft.Colors.WHITE,
-                    color=theme.Colors.PRIMARY,
+                ft.Column(
+                    horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                    spacing=2,
+                    controls=[avatar_display, change_photo_btn, avatar_feedback],
                 ),
                 ft.Column(
+                    expand=True,
                     spacing=4,
                     controls=[
                         ft.Text(full_name, size=20, weight=ft.FontWeight.BOLD,
-                                color=ft.Colors.WHITE),
-                        ft.Text(email, size=12,
+                                color=ft.Colors.WHITE,
+                                max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                        ft.Text(email, size=12, max_lines=1, overflow=ft.TextOverflow.ELLIPSIS,
                                 color=ft.Colors.with_opacity(0.85, ft.Colors.WHITE)),
                         ft.Container(
                             padding=ft.padding.symmetric(horizontal=12, vertical=4),
@@ -65,12 +121,99 @@ def build_profile_view(page: ft.Page) -> ft.View:
         ),
     )
 
+    # ------------------------------------------------------------------
+    # MODIFIER LE PROFIL : nom + mot de passe — disponible pour TOUS les
+    # rôles (étudiant, formateur, admin), pas seulement l'étudiant.
+    # ------------------------------------------------------------------
+    name_field = theme.text_field("Nom complet", icon=ft.Icons.PERSON_OUTLINE)
+    name_field.value = full_name
+    name_feedback = ft.Text("", size=12)
+
+    def save_name(e):
+        new_name = (name_field.value or "").strip()
+        if not new_name:
+            name_feedback.value = "Le nom ne peut pas être vide."
+            name_feedback.color = theme.Colors.ERROR
+            page.update()
+            return
+        try:
+            page.db.update_profile({"full_name": new_name})
+            name_feedback.value = "Nom mis à jour ✓"
+            name_feedback.color = theme.Colors.SUCCESS
+        except Exception:
+            name_feedback.value = "Erreur : écriture refusée."
+            name_feedback.color = theme.Colors.ERROR
+        page.update()
+
+    identity_card = theme.card(
+        padding=20,
+        content=ft.Column(
+            spacing=10,
+            controls=[
+                theme.subtitle("Nom affiché"),
+                name_field,
+                name_feedback,
+                theme.primary_button("Enregistrer le nom", icon=ft.Icons.SAVE_OUTLINED,
+                                     width=220, on_click=save_name),
+            ],
+        ),
+    )
+
+    new_pw_field = theme.text_field("Nouveau mot de passe", password=True, icon=ft.Icons.LOCK_OUTLINE)
+    confirm_pw_field = theme.text_field("Confirmer le mot de passe", password=True, icon=ft.Icons.LOCK_OUTLINE)
+    pw_feedback = ft.Text("", size=12)
+
+    def save_password(e):
+        pw = new_pw_field.value or ""
+        if len(pw) < 6:
+            pw_feedback.value = "Le mot de passe doit contenir au moins 6 caractères."
+            pw_feedback.color = theme.Colors.ERROR
+            page.update()
+            return
+        if pw != (confirm_pw_field.value or ""):
+            pw_feedback.value = "Les deux mots de passe ne correspondent pas."
+            pw_feedback.color = theme.Colors.ERROR
+            page.update()
+            return
+        try:
+            page.db.update_password(pw)
+            new_pw_field.value = ""
+            confirm_pw_field.value = ""
+            pw_feedback.value = "Mot de passe changé ✓"
+            pw_feedback.color = theme.Colors.SUCCESS
+        except Exception:
+            pw_feedback.value = "Erreur lors du changement de mot de passe."
+            pw_feedback.color = theme.Colors.ERROR
+        page.update()
+
+    password_card = theme.card(
+        padding=20,
+        content=ft.Column(
+            spacing=10,
+            controls=[
+                theme.subtitle("Changer le mot de passe"),
+                new_pw_field,
+                confirm_pw_field,
+                pw_feedback,
+                theme.primary_button("Changer le mot de passe", icon=ft.Icons.LOCK_RESET,
+                                     width=240, on_click=save_password),
+            ],
+        ),
+    )
+
     completed = sum(
         1 for en in enrollments
-        if db.get_course_progress((en.get("courses") or {}).get("id", "")) >= 100
+        if page.db.get_course_progress((en.get("courses") or {}).get("id", "")) >= 100
     ) if is_student else 0
 
-    body_controls = [header, ft.Container(height=16)]
+    body_controls = [
+        header,
+        ft.Container(height=16),
+        identity_card,
+        ft.Container(height=12),
+        password_card,
+        ft.Container(height=16),
+    ]
 
     if is_student:
         # Statistiques rapides + raccourcis vers les pages dédiées (pas de

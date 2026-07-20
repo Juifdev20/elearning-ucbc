@@ -89,7 +89,7 @@ def build_error_view(page: ft.Page, on_retry) -> ft.View:
                                              width=220, on_click=lambda e: on_retry()),
                         ft.TextButton(
                             "Retour à l'accueil",
-                            on_click=lambda e: page.go(home_route()),
+                            on_click=lambda e: page.go(home_route(page)),
                             style=ft.ButtonStyle(color=theme.Colors.PRIMARY_ACTION),
                         ),
                     ],

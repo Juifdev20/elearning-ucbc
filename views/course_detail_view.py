@@ -1,27 +1,26 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 
 
 def build_course_detail_view(page: ft.Page, course_id: str) -> ft.View:
-    course = db.get_course(course_id)
-    lessons = db.get_lessons(course_id)
-    db.enroll(course_id)  # inscrit automatiquement l'utilisateur au premier accès
+    course = page.db.get_course(course_id)
+    lessons = page.db.get_lessons(course_id)
+    page.db.enroll(course_id)  # inscrit automatiquement l'utilisateur au premier accès
 
     completed_lesson_ids = set()
     try:
         res = (
-            db.client.table("lesson_progress")
+            page.db.client.table("lesson_progress")
             .select("lesson_id")
-            .eq("user_id", db.current_user.id)
+            .eq("user_id", page.db.current_user.id)
             .execute()
         )
         completed_lesson_ids = {r["lesson_id"] for r in (res.data or [])}
     except Exception:
         pass
 
-    progress = db.get_course_progress(course_id)
+    progress = page.db.get_course_progress(course_id)
 
     def open_lesson(index):
         return lambda e: page.go(f"/course/{course_id}/lesson/{index}")
@@ -109,6 +108,7 @@ def build_course_detail_view(page: ft.Page, course_id: str) -> ft.View:
         controls=[
             ft.Container(
                 padding=20,
+                expand=True,
                 content=ft.Column(
                     scroll=ft.ScrollMode.AUTO,
                     controls=[

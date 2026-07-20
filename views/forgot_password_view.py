@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 
 
@@ -23,7 +22,7 @@ def build_forgot_password_view(page: ft.Page) -> ft.View:
         page.update()
 
         try:
-            db.reset_password(email_field.value.strip())
+            page.db.reset_password(email_field.value.strip())
             info_text.value = "Si un compte existe, un email de réinitialisation vient d'être envoyé."
             info_text.color = theme.Colors.SUCCESS
         except Exception:
@@ -35,12 +34,13 @@ def build_forgot_password_view(page: ft.Page) -> ft.View:
             send_btn.disabled = False
             page.update()
 
-    send_btn = theme.primary_button("Envoyer le lien", icon=ft.Icons.SEND_OUTLINED, on_click=send_reset)
+    send_btn = theme.primary_button("Envoyer le lien", icon=ft.Icons.SEND_OUTLINED, width=240, on_click=send_reset)
 
     return ft.View(
         route="/forgot-password",
         bgcolor=theme.Colors.BG,
         padding=0,
+        appbar=theme.auth_appbar(page, route_back="/login"),
         controls=[
             theme.auth_background(
                 ft.Column(

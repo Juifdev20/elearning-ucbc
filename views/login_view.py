@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import home_route
 
@@ -23,21 +22,22 @@ def build_login_view(page: ft.Page) -> ft.View:
         page.update()
 
         try:
-            db.sign_in(email_field.value.strip(), password_field.value)
+            page.db.sign_in(email_field.value.strip(), password_field.value)
             # Chaque rôle a sa propre interface d'accueil (étudiant, formateur, admin).
-            page.go(home_route())
+            page.go(home_route(page))
         except Exception:
             error_text.value = "Email ou mot de passe incorrect."
             loading.visible = False
             login_btn.disabled = False
             page.update()
 
-    login_btn = theme.primary_button("Se connecter", icon=ft.Icons.LOGIN, on_click=do_login)
+    login_btn = theme.primary_button("Se connecter", icon=ft.Icons.LOGIN, width=240, on_click=do_login)
 
     return ft.View(
         route="/login",
         bgcolor=theme.Colors.BG,
         padding=0,
+        appbar=theme.auth_appbar(page),
         controls=[
             theme.auth_background(
                 ft.Column(

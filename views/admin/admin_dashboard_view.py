@@ -1,15 +1,14 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
-from components.app_shell import shell_view, pending_search
+from components.app_shell import shell_view
 
 
 def build_admin_dashboard_view(page: ft.Page) -> ft.View:
     """Page COURS : liste et gestion des cours (formateur : les siens ; admin : tous)."""
-    is_admin = db.is_admin()
+    is_admin = page.db.is_admin()
     try:
-        courses = db.get_all_courses(mine_only=not is_admin)
+        courses = page.db.get_all_courses(mine_only=not is_admin)
     except Exception:
         courses = []
 
@@ -36,7 +35,7 @@ def build_admin_dashboard_view(page: ft.Page) -> ft.View:
     def confirm_delete(course_id, title):
         def do_delete(e):
             try:
-                db.delete_course(course_id)
+                page.db.delete_course(course_id)
             except Exception:
                 pass
             page.close(dlg)
@@ -121,8 +120,8 @@ def build_admin_dashboard_view(page: ft.Page) -> ft.View:
 
     # Recherche : préremplie si l'utilisateur a tapé une requête dans la
     # barre globale de la topbar (voir components/app_shell.py).
-    global_q = pending_search.get("q", "")
-    pending_search["q"] = ""
+    global_q = getattr(page, "pending_search", "")
+    page.pending_search = ""
 
     rows_col = ft.Column(spacing=12)
     empty_msg = theme.body("Aucun cours ne correspond à votre recherche.", muted=True)

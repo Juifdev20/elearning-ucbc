@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -27,11 +26,11 @@ def _role_label(role: str) -> str:
 def build_users_view(page: ft.Page) -> ft.View:
     """Vue ADMIN : liste des utilisateurs et attribution des rôles."""
     try:
-        profiles = db.get_all_profiles()
+        profiles = page.db.get_all_profiles()
     except Exception:
         profiles = []
 
-    my_id = db.current_user.id if db.current_user else None
+    my_id = page.db.current_user.id if page.db.current_user else None
 
     # Compteurs par rôle.
     counts = {"student": 0, "instructor": 0, "admin": 0}
@@ -56,7 +55,7 @@ def build_users_view(page: ft.Page) -> ft.View:
         def handler(e):
             new_role = e.control.value
             try:
-                updated = db.set_user_role(profile["id"], new_role)
+                updated = page.db.set_user_role(profile["id"], new_role)
                 if updated:
                     page.open(ft.SnackBar(ft.Text(
                         f"✓ {profile.get('full_name', 'Utilisateur')} est maintenant "
@@ -109,8 +108,12 @@ def build_users_view(page: ft.Page) -> ft.View:
                             ft.Row(
                                 spacing=8,
                                 controls=[
-                                    ft.Text(name, weight=ft.FontWeight.W_700, size=14,
-                                            color=theme.Colors.TEXT),
+                                    ft.Container(
+                                        expand=True,
+                                        content=ft.Text(name, weight=ft.FontWeight.W_700, size=14,
+                                                        color=theme.Colors.TEXT,
+                                                        max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                                    ),
                                     theme.chip("Vous", theme.Colors.SUCCESS) if is_me else ft.Container(),
                                 ],
                             ),

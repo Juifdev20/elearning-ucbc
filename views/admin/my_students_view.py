@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -8,7 +7,7 @@ from components.app_shell import shell_view
 def build_my_students_view(page: ft.Page) -> ft.View:
     """Vue FORMATEUR : tous les apprenants inscrits à l'un de ses cours."""
     try:
-        rows = db.get_my_students()
+        rows = page.db.get_my_students()
     except Exception:
         rows = []
 
@@ -47,8 +46,10 @@ def build_my_students_view(page: ft.Page) -> ft.View:
                         spacing=5,
                         controls=[
                             ft.Text(r["student_name"], weight=ft.FontWeight.W_700, size=14,
-                                    color=theme.Colors.TEXT),
-                            ft.Text(r["course_title"], size=12, color=theme.Colors.TEXT_MUTED),
+                                    color=theme.Colors.TEXT,
+                                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
+                            ft.Text(r["course_title"], size=12, color=theme.Colors.TEXT_MUTED,
+                                    max_lines=1, overflow=ft.TextOverflow.ELLIPSIS),
                             theme.progress_bar(p),
                         ],
                     ),

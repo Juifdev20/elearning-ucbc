@@ -13,45 +13,20 @@ import flet as ft
 
 
 # ---------------------------------------------------------------------------
-# PALETTE (charte imposée — voir PROMPT_CLAUDE_CODE.md §2)
-# ---------------------------------------------------------------------------
-class Colors:
-    # Bleus de marque
-    PRIMARY = "#1E3A8A"          # bleu profond : marque, titres, boutons principaux
-    PRIMARY_ACTION = "#2563EB"   # bleu vif : actions, liens
-    BLUE_LIGHT = "#EFF6FF"       # fond bleu très clair
-    BLUE_LIGHT_2 = "#DBEAFE"     # accent bleu clair (badges)
-
-    # Accents
-    SUCCESS = "#16A34A"          # progression / réussite (vert)
-    CERT = "#F59E0B"             # certification / brevet (or-ambre)
-    ERROR = "#DC2626"            # erreur / alerte
-    PURPLE = "#7C3AED"           # accent secondaire (stats, variété visuelle)
-    TEAL = "#0D9488"             # accent secondaire (stats, variété visuelle)
-
-    # Neutres
-    TEXT = "#111827"             # texte principal
-    TEXT_MUTED = "#6B7280"       # texte secondaire
-    BG = "#F9FAFB"               # fond général de page
-    SURFACE = "#FFFFFF"          # fond des cartes
-    BORDER = "#E5E7EB"           # bordures légères
-
-
-def tint(color: str, opacity: float = 0.12) -> str:
-    """Version pastel d'une couleur (pour fonds d'icônes, badges…).
-
-    En mode sombre, l'opacité est légèrement renforcée pour que les fonds
-    teintés restent bien visibles sur le noir.
-    """
-    if _state["dark"]:
-        opacity = min(opacity + 0.06, 1.0)
-    return ft.Colors.with_opacity(opacity, color)
-
-
-# ---------------------------------------------------------------------------
-# MODE SOMBRE — les couleurs "surfaces/texte" sont interchangeables.
-# Les vues lisent theme.Colors.* au moment de leur construction : basculer
-# le mode + reconstruire la vue suffit à tout re-thémer.
+# MODE SOMBRE — préférence PAR SESSION (pas un réglage global partagé par
+# tous les visiteurs : l'app est servie en web à plusieurs utilisateurs en
+# parallèle depuis le même process, donc une préférence "dark mode" mutée sur
+# une classe partagée s'appliquerait à tout le monde en même temps).
+#
+# Le nécessaire est stocké sur `page.dark_mode` (voir set_dark ci-dessous).
+# Pour que `Colors.BG` etc. restent lisibles PARTOUT dans le code sans y
+# passer `page` explicitement (des centaines d'appels dans tout le projet),
+# on s'appuie sur `ft.context.page` : le mécanisme officiel de Flet qui donne
+# accès à la page de la session EN COURS depuis n'importe où, quel que soit
+# le thread qui exécute le code (Flet réinjecte ce contexte à chaque
+# évènement dispatché — page.go(), clic de bouton, etc. — via son propre
+# `run_task`/`run_thread`, y compris entre plusieurs utilisateurs connectés
+# en même temps).
 # ---------------------------------------------------------------------------
 _LIGHT = {
     "PRIMARY": "#1E3A8A",
@@ -78,7 +53,6 @@ _DARK = {
     "SURFACE": "#0F1626",         # cartes : à peine plus claires que le fond
     "BORDER": "#1E293B",          # fine bordure visible sur les cartes
 }
-_state = {"dark": False}
 
 # Bleus de marque FIXES (hero, logo) : restent identiques dans les deux modes,
 # car ils portent du texte blanc.
@@ -86,15 +60,54 @@ BRAND_BLUE_DARK = "#1E3A8A"
 BRAND_BLUE = "#2563EB"
 
 
-def is_dark() -> bool:
-    return _state["dark"]
+def is_dark(page: ft.Page = None) -> bool:
+    """Préférence sombre/clair de LA session courante (ou de `page` si fourni)."""
+    p = page or ft.context.page
+    return bool(getattr(p, "dark_mode", False)) if p is not None else False
 
 
-def set_dark(on: bool):
-    """Bascule la palette clair/sombre (muter Colors + reconstruire les vues)."""
-    _state["dark"] = on
-    for key, value in (_DARK if on else _LIGHT).items():
-        setattr(Colors, key, value)
+def set_dark(page: ft.Page, on: bool):
+    """Change la préférence sombre/clair de CETTE session uniquement."""
+    page.dark_mode = on
+
+
+class _ColorsMeta(type):
+    """Résout dynamiquement PRIMARY/BG/TEXT/... selon le mode sombre de la
+    session en cours à chaque accès (`Colors.BG`), au lieu de muter des
+    attributs de classe partagés par tout le monde."""
+
+    def __getattr__(cls, name):
+        palette = _DARK if is_dark() else _LIGHT
+        if name in palette:
+            return palette[name]
+        raise AttributeError(f"'Colors' n'a pas d'attribut {name!r}")
+
+
+# ---------------------------------------------------------------------------
+# PALETTE (charte imposée — voir PROMPT_CLAUDE_CODE.md §2)
+# ---------------------------------------------------------------------------
+class Colors(metaclass=_ColorsMeta):
+    # Accents (identiques dans les deux modes)
+    SUCCESS = "#16A34A"          # progression / réussite (vert)
+    CERT = "#F59E0B"             # certification / brevet (or-ambre)
+    ERROR = "#DC2626"            # erreur / alerte
+    PURPLE = "#7C3AED"           # accent secondaire (stats, variété visuelle)
+    TEAL = "#0D9488"             # accent secondaire (stats, variété visuelle)
+
+    # PRIMARY, PRIMARY_ACTION, BLUE_LIGHT, BLUE_LIGHT_2, TEXT, TEXT_MUTED,
+    # BG, SURFACE, BORDER : PAS définis ici — résolus dynamiquement par
+    # `_ColorsMeta.__getattr__` ci-dessus, à partir de `_LIGHT`/`_DARK`.
+
+
+def tint(color: str, opacity: float = 0.12) -> str:
+    """Version pastel d'une couleur (pour fonds d'icônes, badges…).
+
+    En mode sombre, l'opacité est légèrement renforcée pour que les fonds
+    teintés restent bien visibles sur le noir.
+    """
+    if is_dark():
+        opacity = min(opacity + 0.06, 1.0)
+    return ft.Colors.with_opacity(opacity, color)
 
 
 # ---------------------------------------------------------------------------
@@ -342,6 +355,21 @@ def branded_appbar(title: str, leading=None, actions: list | None = None) -> ft.
         bgcolor=Colors.SURFACE,
         leading=leading,
         actions=actions or [],
+    )
+
+
+def auth_appbar(page: ft.Page, route_back: str = "/") -> ft.AppBar:
+    """Barre transparente avec flèche retour, pour les écrans d'authentification
+    (retour à la page d'accueil publique)."""
+    return ft.AppBar(
+        bgcolor=ft.Colors.TRANSPARENT,
+        elevation=0,
+        leading=ft.IconButton(
+            ft.Icons.ARROW_BACK,
+            icon_color=Colors.PRIMARY,
+            tooltip="Retour à l'accueil",
+            on_click=lambda e: page.go(route_back),
+        ),
     )
 
 

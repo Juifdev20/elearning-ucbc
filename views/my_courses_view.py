@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -8,7 +7,7 @@ from components.app_shell import shell_view
 def build_my_courses_view(page: ft.Page) -> ft.View:
     """Onglet MES COURS : liste des cours auxquels l'utilisateur est inscrit."""
     try:
-        enrollments = db.get_my_enrollments()
+        enrollments = page.db.get_my_enrollments()
     except Exception:
         enrollments = []
 
@@ -19,7 +18,7 @@ def build_my_courses_view(page: ft.Page) -> ft.View:
         course = enrollment.get("courses") or {}
         course_id = course.get("id", "")
         try:
-            progress = db.get_course_progress(course_id)
+            progress = page.db.get_course_progress(course_id)
         except Exception:
             progress = 0
         done = progress >= 100
@@ -42,7 +41,14 @@ def build_my_courses_view(page: ft.Page) -> ft.View:
                             ft.Row(
                                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                                 controls=[
-                                    theme.subtitle(course.get("title", "Cours")),
+                                    ft.Container(
+                                        expand=True,
+                                        content=ft.Text(
+                                            course.get("title", "Cours"), size=16,
+                                            weight=ft.FontWeight.W_600, color=theme.Colors.TEXT,
+                                            max_lines=1, overflow=ft.TextOverflow.ELLIPSIS,
+                                        ),
+                                    ),
                                     theme.chip("Terminé ✓", theme.Colors.SUCCESS) if done
                                     else theme.chip("En cours", theme.Colors.PRIMARY_ACTION),
                                 ],

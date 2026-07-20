@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 
 
@@ -49,7 +48,7 @@ def _workflow_card(page: ft.Page, course_id: str, status: str, rejection_reason:
 
     def do_submit(e):
         try:
-            db.submit_course_for_review(course_id)
+            page.db.submit_course_for_review(course_id)
             page.go(f"/admin/course/{course_id}")  # reconstruit avec le nouveau statut
         except Exception:
             feedback.value = "Erreur : écriture refusée. Avez-vous exécuté sql/course_approval.sql ?"
@@ -57,7 +56,7 @@ def _workflow_card(page: ft.Page, course_id: str, status: str, rejection_reason:
 
     def do_withdraw(e):
         try:
-            db.withdraw_course(course_id)
+            page.db.withdraw_course(course_id)
             page.go(f"/admin/course/{course_id}")
         except Exception:
             feedback.value = "Erreur : écriture refusée. Avez-vous exécuté sql/course_approval.sql ?"
@@ -77,7 +76,7 @@ def _workflow_card(page: ft.Page, course_id: str, status: str, rejection_reason:
 
         def apply_status(e):
             try:
-                db.update_course(course_id, {
+                page.db.update_course(course_id, {
                     "status": status_dd.value,
                     "rejection_reason": reason_f.value.strip() if status_dd.value == "rejected" else None,
                 })
@@ -121,7 +120,7 @@ def build_course_editor_view(page: ft.Page, course_id: str | None) -> ft.View:
     - course_id fourni   -> édition + gestion des leçons
     """
     editing = course_id is not None
-    course = db.get_course(course_id) if editing else {}
+    course = page.db.get_course(course_id) if editing else {}
     course = course or {}
 
     title_f = _field("Titre du cours", course.get("title", ""))
@@ -131,7 +130,7 @@ def build_course_editor_view(page: ft.Page, course_id: str | None) -> ft.View:
                    hint="https://…")
     feedback = ft.Text("", size=13)
     status = course.get("status", "published" if course.get("is_published", True) else "draft")
-    is_admin = db.is_admin()
+    is_admin = page.db.is_admin()
 
     def save_course(e):
         feedback.value = ""
@@ -148,12 +147,12 @@ def build_course_editor_view(page: ft.Page, course_id: str | None) -> ft.View:
         }
         try:
             if editing:
-                db.update_course(course_id, fields)
+                page.db.update_course(course_id, fields)
                 feedback.value = "Modifications enregistrées ✓"
                 feedback.color = theme.Colors.SUCCESS
                 page.update()
             else:
-                created = db.create_course(**fields)
+                created = page.db.create_course(**fields)
                 if created:
                     page.go(f"/admin/course/{created['id']}")  # bascule en mode édition
                     return
@@ -185,17 +184,20 @@ def build_course_editor_view(page: ft.Page, course_id: str | None) -> ft.View:
     ]
 
     if not editing:
+        hint_text = theme.body(
+            "Enregistrez d'abord ces infos : vous pourrez ensuite ajouter les leçons, "
+            "avec leur lien vidéo (YouTube) et leur document PDF téléchargeable.",
+            muted=True,
+        )
+        hint_text.expand = True
         controls.append(ft.Container(height=10))
         controls.append(
             ft.Row(
                 spacing=8,
+                vertical_alignment=ft.CrossAxisAlignment.START,
                 controls=[
                     ft.Icon(ft.Icons.INFO_OUTLINE, size=16, color=theme.Colors.TEXT_MUTED),
-                    theme.body(
-                        "Enregistrez d'abord ces infos : vous pourrez ensuite ajouter les leçons, "
-                        "avec leur lien vidéo (YouTube) et leur document PDF téléchargeable.",
-                        muted=True,
-                    ),
+                    hint_text,
                 ],
             )
         )
@@ -212,7 +214,7 @@ def build_course_editor_view(page: ft.Page, course_id: str | None) -> ft.View:
         lessons_col = ft.Column(spacing=10)
 
         def refresh_lessons():
-            lessons = db.get_lessons(course_id)
+            lessons = page.db.get_lessons(course_id)
             lessons_col.controls.clear()
             for i, lesson in enumerate(lessons):
                 lessons_col.controls.append(_lesson_row(lesson, i, lessons))
@@ -227,7 +229,7 @@ def build_course_editor_view(page: ft.Page, course_id: str | None) -> ft.View:
             lf = _field("Document PDF du cours (optionnel)", lesson.get("file_url", ""), hint="https://…")
 
             def save(e):
-                db.update_lesson(lesson["id"], {
+                page.db.update_lesson(lesson["id"], {
                     "title": lt.value.strip(),
                     "content": lc.value.strip(),
                     "video_url": lv.value.strip() or None,
@@ -239,7 +241,7 @@ def build_course_editor_view(page: ft.Page, course_id: str | None) -> ft.View:
             dlg = ft.AlertDialog(
                 modal=True,
                 title=ft.Text("Éditer la leçon"),
-                content=ft.Container(width=400, height=420, content=ft.Column(
+                content=ft.Container(width=320, height=420, content=ft.Column(
                     tight=True, spacing=10, scroll=ft.ScrollMode.AUTO,
                     controls=[lt, lc, lv, lf])),
                 actions=[
@@ -255,13 +257,13 @@ def build_course_editor_view(page: ft.Page, course_id: str | None) -> ft.View:
                 idx = others.index(lesson)
                 j = idx + delta
                 if 0 <= j < len(others):
-                    db.swap_lesson_positions(lesson, others[j])
+                    page.db.swap_lesson_positions(lesson, others[j])
                     refresh_lessons()
             return handler
 
         def delete_lesson(lesson):
             def handler(e):
-                db.delete_lesson(lesson["id"])
+                page.db.delete_lesson(lesson["id"])
                 refresh_lessons()
             return handler
 
@@ -300,7 +302,7 @@ def build_course_editor_view(page: ft.Page, course_id: str | None) -> ft.View:
                 page.update()
                 return
             try:
-                db.create_lesson(
+                page.db.create_lesson(
                     course_id,
                     title=new_title.value.strip(),
                     content=new_content.value.strip(),
@@ -343,6 +345,7 @@ def build_course_editor_view(page: ft.Page, course_id: str | None) -> ft.View:
         controls=[
             ft.Container(
                 padding=20,
+                expand=True,
                 content=ft.Column(scroll=ft.ScrollMode.AUTO, controls=controls),
             )
         ],

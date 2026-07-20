@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -8,15 +7,15 @@ from components.app_shell import shell_view
 def build_progress_view(page: ft.Page) -> ft.View:
     """Onglet PROGRESSION : vue d'ensemble de l'avancement sur tous les cours."""
     try:
-        enrollments = db.get_my_enrollments()
+        enrollments = page.db.get_my_enrollments()
     except Exception:
         enrollments = []
     try:
-        certificates = db.get_my_certificates()
+        certificates = page.db.get_my_certificates()
     except Exception:
         certificates = []
     try:
-        activity = db.get_my_activity_feed(limit=15)
+        activity = page.db.get_my_activity_feed(limit=15)
     except Exception:
         activity = []
 
@@ -27,7 +26,7 @@ def build_progress_view(page: ft.Page) -> ft.View:
     for en in enrollments:
         course = en.get("courses") or {}
         try:
-            p = db.get_course_progress(course.get("id", ""))
+            p = page.db.get_course_progress(course.get("id", ""))
         except Exception:
             p = 0
         per_course.append((course.get("title", "Cours"), p))

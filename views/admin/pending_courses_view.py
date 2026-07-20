@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -8,7 +7,7 @@ from components.app_shell import shell_view
 def build_pending_courses_view(page: ft.Page) -> ft.View:
     """Vue ADMIN : file d'attente des cours soumis par les formateurs, à valider."""
     try:
-        pending = db.get_pending_courses()
+        pending = page.db.get_pending_courses()
         unavailable = False
     except Exception:
         pending = []
@@ -17,7 +16,7 @@ def build_pending_courses_view(page: ft.Page) -> ft.View:
     def approve(course_id):
         def handler(e):
             try:
-                db.approve_course(course_id)
+                page.db.approve_course(course_id)
             except Exception:
                 pass
             page.go("/admin/pending-courses")
@@ -33,7 +32,7 @@ def build_pending_courses_view(page: ft.Page) -> ft.View:
 
         def confirm(e):
             try:
-                db.reject_course(course_id, reason_f.value.strip())
+                page.db.reject_course(course_id, reason_f.value.strip())
             except Exception:
                 pass
             page.close(dlg)
@@ -42,7 +41,7 @@ def build_pending_courses_view(page: ft.Page) -> ft.View:
         dlg = ft.AlertDialog(
             modal=True,
             title=ft.Text(f"Rejeter « {title} » ?"),
-            content=ft.Container(width=380, content=reason_f),
+            content=ft.Container(width=300, content=reason_f),
             actions=[
                 ft.TextButton("Annuler", on_click=lambda e: page.close(dlg)),
                 ft.TextButton("Rejeter", on_click=confirm,
@@ -79,6 +78,7 @@ def build_pending_courses_view(page: ft.Page) -> ft.View:
                             overflow=ft.TextOverflow.ELLIPSIS),
                     ft.Row(
                         spacing=8,
+                        wrap=True,
                         controls=[
                             ft.TextButton(
                                 "Aperçu", icon=ft.Icons.VISIBILITY_OUTLINED,

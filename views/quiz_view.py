@@ -1,18 +1,17 @@
 import flet as ft
 
-from services.supabase_service import db
 from services.certificate_service import generate_certificate, certificate_url
 from components import theme
 
 
 def build_quiz_view(page: ft.Page, course_id: str) -> ft.View:
-    course = db.get_course(course_id)
-    quiz = db.get_quiz(course_id)
+    course = page.db.get_course(course_id)
+    quiz = page.db.get_quiz(course_id)
 
     # Garde-fou anti-triche : impossible d'accéder au quiz (même par URL directe)
     # tant que toutes les leçons du cours n'ont pas été marquées terminées.
-    lessons = db.get_lessons(course_id)
-    progress = db.get_course_progress(course_id) if lessons else 100.0
+    lessons = page.db.get_lessons(course_id)
+    progress = page.db.get_course_progress(course_id) if lessons else 100.0
     if lessons and progress < 100:
         return ft.View(
             route=f"/course/{course_id}/quiz",
@@ -28,6 +27,7 @@ def build_quiz_view(page: ft.Page, course_id: str) -> ft.View:
             controls=[
                 ft.Container(
                     padding=20,
+                    expand=True,
                     content=theme.card(
                         padding=24,
                         content=ft.Column(
@@ -115,17 +115,18 @@ def build_quiz_view(page: ft.Page, course_id: str) -> ft.View:
         pass_score = quiz.get("pass_score", 70)
         passed = score >= pass_score
 
-        db.submit_quiz_attempt(quiz["id"], score, passed)
+        page.db.submit_quiz_attempt(quiz["id"], score, passed)
 
         result_container.visible = True
         result_container.content = _build_result(score, passed, pass_score)
 
         if passed:
-            profile = db.current_profile or {}
+            profile = page.db.current_profile or {}
             student_name = profile.get("full_name", "Apprenant")
             course_title = course["title"] if course else "Cours"
-            generate_certificate(student_name=student_name, course_title=course_title, score=score)
-            db.create_certificate(course_id, certificate_url=certificate_url(student_name, course_title))
+            generate_certificate(student_name=student_name, course_title=course_title, score=score,
+                                avatar_url=profile.get("avatar_url"))
+            page.db.create_certificate(course_id, certificate_url=certificate_url(student_name, course_title))
 
         submit_btn.text = "Soumettre mes réponses"
         submit_btn.disabled = False
@@ -180,6 +181,7 @@ def build_quiz_view(page: ft.Page, course_id: str) -> ft.View:
         controls=[
             ft.Container(
                 padding=20,
+                expand=True,
                 content=ft.Column(
                     scroll=ft.ScrollMode.AUTO,
                     controls=[

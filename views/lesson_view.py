@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 
 
@@ -10,8 +9,8 @@ def build_lesson_view(page: ft.Page, course_id: str, index: int) -> ft.View:
     Contenu riche : texte, vidéo (lien), support PDF téléchargeable.
     Navigation séquentielle : leçon précédente / suivante, ou évaluation finale.
     """
-    course = db.get_course(course_id)
-    lessons = db.get_lessons(course_id)
+    course = page.db.get_course(course_id)
+    lessons = page.db.get_lessons(course_id)
 
     # Garde-fou sur l'index.
     if not lessons:
@@ -34,9 +33,9 @@ def build_lesson_view(page: ft.Page, course_id: str, index: int) -> ft.View:
     completed_ids = set()
     try:
         res = (
-            db.client.table("lesson_progress")
+            page.db.client.table("lesson_progress")
             .select("lesson_id")
-            .eq("user_id", db.current_user.id)
+            .eq("user_id", page.db.current_user.id)
             .execute()
         )
         completed_ids = {r["lesson_id"] for r in (res.data or [])}
@@ -67,7 +66,7 @@ def build_lesson_view(page: ft.Page, course_id: str, index: int) -> ft.View:
         done_btn.disabled = True
         page.update()
 
-        db.mark_lesson_complete(lesson["id"])
+        page.db.mark_lesson_complete(lesson["id"])
         done_btn.text = "Leçon terminée ✓"
         done_btn.style.bgcolor = theme.Colors.BORDER
         status_icon.name = ft.Icons.CHECK_CIRCLE
@@ -143,6 +142,9 @@ def build_lesson_view(page: ft.Page, course_id: str, index: int) -> ft.View:
 
     nav_row = ft.Row(
         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        wrap=True,
+        spacing=12,
+        run_spacing=8,
         controls=[prev_btn, next_btn],
     )
 
@@ -161,6 +163,7 @@ def build_lesson_view(page: ft.Page, course_id: str, index: int) -> ft.View:
         controls=[
             ft.Container(
                 padding=20,
+                expand=True,
                 content=ft.Column(
                     scroll=ft.ScrollMode.AUTO,
                     controls=[

@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -8,7 +7,7 @@ from components.app_shell import shell_view
 def build_categories_view(page: ft.Page) -> ft.View:
     """Vue ADMIN : catégories de cours utilisées, avec renommage groupé."""
     try:
-        categories = db.get_categories_summary()
+        categories = page.db.get_categories_summary()
     except Exception:
         categories = []
 
@@ -27,7 +26,7 @@ def build_categories_view(page: ft.Page) -> ft.View:
                 page.update()
                 return
             try:
-                db.rename_category(category, new_name)
+                page.db.rename_category(category, new_name)
                 page.close(dlg)
                 page.go("/admin/categories")  # reconstruit la liste
             except Exception:
@@ -38,7 +37,7 @@ def build_categories_view(page: ft.Page) -> ft.View:
             modal=True,
             title=ft.Text(f"Renommer « {category} »"),
             content=ft.Container(
-                width=360,
+                width=300,
                 content=ft.Column(
                     tight=True,
                     spacing=10,

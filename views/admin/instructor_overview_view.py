@@ -1,6 +1,5 @@
 import flet as ft
 
-from services.supabase_service import db
 from components import theme
 from components.app_shell import shell_view
 
@@ -8,12 +7,12 @@ from components.app_shell import shell_view
 def build_instructor_overview_view(page: ft.Page) -> ft.View:
     """Vue d'ensemble FORMATEUR : KPIs et graphique limités à ses propres cours."""
     try:
-        stats = db.get_my_teaching_stats()
+        stats = page.db.get_my_teaching_stats()
     except Exception:
         stats = {"total_courses": 0, "published_courses": 0, "total_students": 0,
                  "total_certificates": 0, "avg_completion": 0.0}
     try:
-        top_courses = db.get_enrollments_per_my_course()
+        top_courses = page.db.get_enrollments_per_my_course()
     except Exception:
         top_courses = []
 

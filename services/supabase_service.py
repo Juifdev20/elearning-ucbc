@@ -3,6 +3,8 @@ Couche d'accès à Supabase.
 Toutes les requêtes de l'application passent par cette classe,
 pour garder la logique métier séparée de l'interface (views/).
 """
+from uuid import uuid4
+
 from supabase import create_client, Client
 from config import SUPABASE_URL, SUPABASE_KEY
 
@@ -45,6 +47,42 @@ class SupabaseService:
     def reset_password(self, email: str):
         """Envoie un email de réinitialisation de mot de passe (Supabase Auth)."""
         return self.client.auth.reset_password_for_email(email)
+
+    def update_password(self, new_password: str):
+        """Change le mot de passe du compte connecté (utilisé depuis Mon profil,
+        contrairement à reset_password qui envoie un email)."""
+        return self.client.auth.update_user({"password": new_password})
+
+    def update_profile(self, fields: dict):
+        """Met à jour le profil de l'utilisateur connecté (nom, photo…) et
+        rafraîchit `current_profile` en mémoire."""
+        res = (
+            self.client.table("profiles")
+            .update(fields)
+            .eq("id", self.current_user.id)
+            .execute()
+        )
+        if res.data:
+            self.current_profile = res.data[0]
+        return res.data[0] if res.data else None
+
+    def upload_avatar(self, local_path: str, ext: str) -> str:
+        """Envoie la photo de profil dans le bucket Supabase Storage `avatars`
+        (un fichier par utilisateur, écrasé à chaque changement), met à jour
+        `avatar_url` sur le profil, et retourne l'URL publique."""
+        ext = (ext or "jpg").lower().lstrip(".")
+        storage_path = f"{self.current_user.id}/avatar.{ext}"
+        with open(local_path, "rb") as f:
+            self.client.storage.from_("avatars").upload(
+                storage_path,
+                f,
+                file_options={"upsert": "true", "content-type": f"image/{ext}"},
+            )
+        # Casse le cache navigateur/CDN : même chemin de fichier à chaque
+        # upload, sans ce paramètre l'ancienne photo resterait affichée.
+        public_url = f"{self.client.storage.from_('avatars').get_public_url(storage_path)}?v={uuid4().hex[:8]}"
+        self.update_profile({"avatar_url": public_url})
+        return public_url
 
     def _load_profile(self):
         res = (
@@ -563,7 +601,7 @@ class SupabaseService:
         """Tous les certificats délivrés, avec apprenant et cours."""
         res = (
             self.client.table("certificates")
-            .select("*, profiles(full_name), courses(title)")
+            .select("*, profiles(full_name, avatar_url), courses(title)")
             .order("issued_at", desc=True)
             .execute()
         )
@@ -659,7 +697,7 @@ class SupabaseService:
             return []
         res = (
             self.client.table("certificates")
-            .select("*, profiles(full_name), courses(title)")
+            .select("*, profiles(full_name, avatar_url), courses(title)")
             .in_("course_id", course_ids)
             .order("issued_at", desc=True)
             .execute()
@@ -715,5 +753,9 @@ class SupabaseService:
         self.client.table("announcements").delete().eq("id", announcement_id).execute()
 
 
-# Instance unique partagée par toute l'application (pattern singleton simple)
-db = SupabaseService()
+# IMPORTANT : pas d'instance globale partagée ici. L'app est servie en web à
+# PLUSIEURS utilisateurs simultanés depuis le même process Python — une seule
+# instance de SupabaseService partagée mélangerait les sessions (l'un verrait
+# le compte/profil d'un autre). Chaque session Flet crée SA PROPRE instance,
+# attachée à `page.db` dans main.py, et toutes les vues y accèdent via
+# `page.db` (jamais via un import direct de `db`).

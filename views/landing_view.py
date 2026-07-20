@@ -34,13 +34,14 @@ def _nav_link(text: str, on_click) -> ft.TextButton:
 
 
 def _header(page: ft.Page, desktop: bool, scroll_to) -> ft.Container:
-    brand = ft.Row(
-        spacing=10,
-        controls=[
-            theme.brand_logo(size=38),
-            ft.Text("E-Learning UCBC", size=16, weight=ft.FontWeight.BOLD, color=theme.Colors.PRIMARY),
-        ],
-    )
+    brand_children = [theme.brand_logo(size=38)]
+    if desktop:
+        # Sur mobile, le nom de marque est retiré pour laisser la place aux
+        # boutons d'action (éviter tout débordement horizontal du header).
+        brand_children.append(
+            ft.Text("E-Learning UCBC", size=16, weight=ft.FontWeight.BOLD, color=theme.Colors.PRIMARY)
+        )
+    brand = ft.Row(spacing=10, controls=brand_children)
 
     nav_links = ft.Row(
         spacing=4,
@@ -51,28 +52,50 @@ def _header(page: ft.Page, desktop: bool, scroll_to) -> ft.Container:
         ],
     ) if desktop else ft.Container()
 
-    actions = ft.Row(
-        spacing=8,
-        controls=[
-            ft.TextButton(
-                "Se connecter",
-                on_click=lambda e: page.go("/login"),
-                style=ft.ButtonStyle(color=theme.Colors.PRIMARY_ACTION),
-            ),
-            theme.primary_button(
-                "S'inscrire", icon=ft.Icons.ARROW_FORWARD,
-                width=150 if desktop else 130,
-                on_click=lambda e: page.go("/signup"),
-            ),
-        ],
-    )
+    if desktop:
+        actions = ft.Row(
+            spacing=8,
+            controls=[
+                ft.TextButton(
+                    "Se connecter",
+                    on_click=lambda e: page.go("/login"),
+                    style=ft.ButtonStyle(color=theme.Colors.PRIMARY_ACTION),
+                ),
+                theme.primary_button(
+                    "S'inscrire", icon=ft.Icons.ARROW_FORWARD,
+                    width=150,
+                    on_click=lambda e: page.go("/signup"),
+                ),
+            ],
+        )
+    else:
+        # Mobile : bouton "Se connecter" réduit à une icône (au lieu d'un
+        # texte) pour laisser toute la place nécessaire à l'inscription,
+        # sans jamais risquer de déborder même sur les très petits écrans.
+        actions = ft.Row(
+            spacing=4,
+            controls=[
+                ft.IconButton(
+                    ft.Icons.LOGIN,
+                    icon_color=theme.Colors.PRIMARY_ACTION,
+                    tooltip="Se connecter",
+                    on_click=lambda e: page.go("/login"),
+                ),
+                theme.primary_button(
+                    "S'inscrire",
+                    width=100,
+                    on_click=lambda e: page.go("/signup"),
+                ),
+            ],
+        )
 
     return ft.Container(
-        padding=ft.padding.symmetric(horizontal=24 if desktop else 14, vertical=14),
+        padding=ft.padding.symmetric(horizontal=24 if desktop else 10, vertical=10),
         bgcolor=theme.Colors.SURFACE,
         border=ft.border.only(bottom=ft.BorderSide(1, theme.Colors.BORDER)),
         content=ft.Row(
             alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+            wrap=True,
             controls=[brand, nav_links, actions] if desktop else [brand, actions],
         ),
     )

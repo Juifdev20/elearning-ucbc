@@ -6,4 +6,5 @@ build/
 storage/
 certificates/
 assets/certificates/*.pdf
+uploads/
 .claude/
