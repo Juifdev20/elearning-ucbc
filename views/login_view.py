@@ -1,4 +1,5 @@
 import flet as ft
+from gotrue.errors import AuthApiError
 
 from components import theme
 from components.app_shell import home_route
@@ -34,6 +35,21 @@ def build_login_view(page: ft.Page) -> ft.View:
                     pass
             # Chaque rôle a sa propre interface d'accueil (étudiant, formateur, admin).
             page.go(home_route(page))
+        except AuthApiError as ex:
+            # Supabase distingue "email non confirmé" d'un vrai mauvais mot de
+            # passe (code() == "email_not_confirmed") — les confondre sous un
+            # message générique induisait l'utilisateur en erreur (il croyait
+            # s'être trompé alors qu'il devait juste valider son adresse).
+            if getattr(ex, "code", None) == "email_not_confirmed":
+                error_text.value = (
+                    "Adresse email non confirmée. Vérifiez votre boîte mail "
+                    "(et les spams) pour le lien de confirmation envoyé à l'inscription."
+                )
+            else:
+                error_text.value = "Email ou mot de passe incorrect."
+            loading.visible = False
+            login_btn.content.controls[-1].value = "Se connecter"
+            page.update()
         except Exception:
             error_text.value = "Email ou mot de passe incorrect."
             loading.visible = False

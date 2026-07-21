@@ -4,6 +4,34 @@
 <head>
   <base href="/">
 
+  <!-- Supabase renvoie les liens de confirmation d'email / réinitialisation
+       avec les jetons dans le FRAGMENT d'URL (#access_token=...&type=signup
+       ou #error=...) — un fragment n'est JAMAIS envoyé au serveur, donc notre
+       code Python (le routeur Flet) ne peut absolument pas le lire tel quel.
+       On le convertit ici, côté navigateur, en une route classique avec
+       paramètres de requête (?...) que Flet sait lire, AVANT que Flutter ne
+       démarre — pour afficher une page à notre image (succès/erreur) au lieu
+       de l'erreur générique du navigateur sur une URL en #, ou d'une page
+       blanche pointant vers un localhost qui n'existe pas en production.
+       Doit s'exécuter avant flutter_bootstrap.js. -->
+  <script>
+    (function () {
+      var hash = window.location.hash;
+      if (!hash || hash.length < 2) return;
+      var params = new URLSearchParams(hash.substring(1));
+      if (params.has('error')) {
+        var msg = params.get('error_description') || 'Lien invalide ou expiré.';
+        window.location.replace('/auth-callback?status=error&msg=' + encodeURIComponent(msg));
+      } else if (params.has('access_token')) {
+        var at = params.get('access_token');
+        var rt = params.get('refresh_token') || '';
+        window.location.replace(
+          '/auth-callback?status=ok&at=' + encodeURIComponent(at) + '&rt=' + encodeURIComponent(rt)
+        );
+      }
+    })();
+  </script>
+
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="Plateforme e-learning UCBC : cours, évaluations, certificats et suivi de progression.">

@@ -29,8 +29,19 @@ def build_signup_view(page: ft.Page) -> ft.View:
         page.update()
 
         try:
-            page.db.sign_up(email_field.value.strip(), password_field.value, name_field.value.strip())
-            success_text.value = "Compte créé ! Vous pouvez vous connecter."
+            result = page.db.sign_up(email_field.value.strip(), password_field.value, name_field.value.strip())
+            # Supabase exige par défaut la confirmation de l'email : tant que
+            # ce n'est pas fait, `session` reste vide et la connexion échouera
+            # ("email non confirmé") — prévenir tout de suite évite la
+            # confusion ("email/mot de passe incorrect" alors que le compte
+            # existe bel et bien).
+            if result.session:
+                success_text.value = "Compte créé ! Vous pouvez vous connecter."
+            else:
+                success_text.value = (
+                    "Compte créé ! Vérifiez votre boîte mail (et les spams) pour confirmer "
+                    "votre adresse AVANT de vous connecter."
+                )
         except Exception:
             error_text.value = "Erreur lors de l'inscription. Cet email est peut-être déjà utilisé."
         finally:

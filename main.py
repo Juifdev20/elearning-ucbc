@@ -7,6 +7,7 @@ from components import theme
 from components.app_shell import is_desktop, shell_view, home_route
 from components.loading import build_loading_view, build_error_view, loading_body
 from views.landing_view import build_landing_view
+from views.auth_callback_view import build_auth_callback_view
 from views.login_view import build_login_view
 from views.signup_view import build_signup_view
 from views.forgot_password_view import build_forgot_password_view
@@ -114,6 +115,12 @@ def main(page: ft.Page):
 
         if page.route == "/forgot-password":
             return build_forgot_password_view(page)
+
+        if page.route.startswith("/auth-callback"):
+            # Retour d'un lien envoyé par email par Supabase (confirmation
+            # d'inscription…), après conversion du fragment d'URL en
+            # paramètres classiques par le script dans assets/index.html.
+            return build_auth_callback_view(page)
 
         if page.route == "/dashboard":
             if not page.db.current_user:
