@@ -55,7 +55,10 @@ def build_profile_view(page: ft.Page) -> ft.View:
 
     def on_avatar_uploaded(e: ft.FilePickerUploadEvent):
         if e.error:
-            avatar_feedback.value = f"Échec de l'envoi ({e.error})."
+            if "max upload size" in e.error.lower():
+                avatar_feedback.value = "Photo trop lourde (max 15 Mo) — essayez une photo plus légère."
+            else:
+                avatar_feedback.value = f"Échec de l'envoi ({e.error})."
             page.update()
             return
         # IMPORTANT : ne JAMAIS comparer une progression flottante avec ==1 —

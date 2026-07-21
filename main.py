@@ -324,7 +324,7 @@ if __name__ == "__main__":
             assets_dir=os.path.join(project_root, "assets"),
             upload_dir=os.path.join(project_root, "uploads"),
             upload_endpoint_path="upload",
-            max_upload_size=5 * 1024 * 1024,  # 5 Mo par fichier
+            max_upload_size=15 * 1024 * 1024,  # 15 Mo (une photo de smartphone dépasse souvent 5 Mo)
             secret_key=secret_key,
         )
         uvicorn.run(fastapi_app, host="0.0.0.0", port=int(render_port))
